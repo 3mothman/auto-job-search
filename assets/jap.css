@@ -1,0 +1,1295 @@
+/* Job Automation Portal — Bewerbungsmappe
+   Farbwelt: Tinte auf Papier, Senfgelb als Signal. */
+
+.jap-form-wrapper,
+.jap-dashboard {
+	--jap-ink:      #12203A;
+	--jap-ink-soft: #5A6880;
+	--jap-paper:    #FFFFFF;
+	--jap-canvas:   #EDF0F5;
+	--jap-line:     #D8DEE8;
+	--jap-signal:   #E3A008;
+	--jap-go:       #12715A;
+	--jap-off:      #8A93A5;
+	--jap-alert:    #A3271B;
+	--jap-radius:   10px;
+
+	max-width: 720px;
+	margin: 0 auto;
+	color: var(--jap-ink);
+	text-align: left;
+}
+
+/* ---------- Mikro-Labels: das Vokabular von Formularen ---------- */
+.jap-form-wrapper label,
+.jap-meta-label {
+	display: block;
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.09em;
+	text-transform: uppercase;
+	color: var(--jap-ink-soft);
+	margin-bottom: 6px;
+}
+
+/* ---------- Formulare ---------- */
+.jap-form-wrapper .jap-field {
+	margin: 0 0 18px;
+}
+
+.jap-form-wrapper input[type="text"],
+.jap-form-wrapper input[type="email"],
+.jap-form-wrapper input[type="password"],
+.jap-form-wrapper select {
+	width: 100%;
+	box-sizing: border-box;
+	padding: 11px 13px;
+	font-size: 15px;
+	color: var(--jap-ink);
+	background: var(--jap-paper);
+	border: 1px solid var(--jap-line);
+	border-radius: 8px;
+	transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.jap-form-wrapper input[type="file"] {
+	width: 100%;
+	box-sizing: border-box;
+	padding: 11px 13px;
+	font-size: 14px;
+	background: var(--jap-canvas);
+	border: 1px dashed var(--jap-line);
+	border-radius: 8px;
+}
+
+.jap-form-wrapper input:focus,
+.jap-form-wrapper select:focus {
+	outline: none;
+	border-color: var(--jap-ink);
+	box-shadow: 0 0 0 3px rgba(18, 32, 58, .12);
+}
+
+.jap-form-wrapper .jap-hint {
+	margin: 6px 0 0;
+	font-size: 12px;
+	color: var(--jap-ink-soft);
+}
+
+/* ---------- Buttons ---------- */
+.jap-form-wrapper button,
+.jap-dashboard .jap-btn {
+	display: inline-block;
+	padding: 11px 20px;
+	font-size: 14px;
+	font-weight: 600;
+	font-family: inherit;
+	color: var(--jap-paper);
+	background: var(--jap-ink);
+	border: 1px solid var(--jap-ink);
+	border-radius: 8px;
+	cursor: pointer;
+	transition: background .15s ease, transform .05s ease;
+}
+
+.jap-form-wrapper button:hover,
+.jap-dashboard .jap-btn:hover {
+	background: #1D3357;
+}
+
+.jap-form-wrapper button:active,
+.jap-dashboard .jap-btn:active {
+	transform: translateY(1px);
+}
+
+.jap-dashboard .jap-btn--quiet {
+	color: var(--jap-ink);
+	background: transparent;
+	border-color: var(--jap-line);
+	padding: 8px 14px;
+	font-size: 13px;
+}
+
+.jap-dashboard .jap-btn--quiet:hover {
+	background: var(--jap-canvas);
+	border-color: var(--jap-ink-soft);
+}
+
+.jap-dashboard .jap-btn--tiny {
+	padding: 5px 11px;
+	font-size: 12px;
+	font-weight: 500;
+	color: var(--jap-ink-soft);
+	background: transparent;
+	border: 1px solid var(--jap-line);
+}
+
+.jap-dashboard .jap-btn--tiny:hover {
+	background: var(--jap-canvas);
+	color: var(--jap-ink);
+}
+
+:where(.jap-form-wrapper, .jap-dashboard) button:focus-visible,
+:where(.jap-form-wrapper, .jap-dashboard) a:focus-visible {
+	outline: 2px solid var(--jap-ink);
+	outline-offset: 2px;
+}
+
+/* ---------- Meldungen ---------- */
+.jap-scope-notice {
+	margin: 0 0 18px;
+	padding: 13px 15px;
+	font-size: 14px;
+	line-height: 1.5;
+	border-radius: 8px;
+	border-left: 4px solid var(--jap-ink-soft);
+	background: var(--jap-canvas);
+}
+
+.jap-message p {
+	margin: 0;
+	padding: 13px 15px;
+	font-size: 14px;
+	border-radius: 8px;
+	border-left: 4px solid var(--jap-ink-soft);
+	background: var(--jap-canvas);
+}
+
+.jap-message p[style*="green"] {
+	color: var(--jap-go) !important;
+	border-left-color: var(--jap-go);
+	background: #EAF4F0;
+}
+
+.jap-message p[style*="red"] {
+	color: var(--jap-alert) !important;
+	border-left-color: var(--jap-alert);
+	background: #FAEEEC;
+}
+
+/* ---------- Dashboard-Kopf ---------- */
+.jap-userbar {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	align-items: baseline;
+	justify-content: space-between;
+	padding-bottom: 14px;
+	margin-bottom: 22px;
+	border-bottom: 1px solid var(--jap-line);
+	font-size: 13px;
+	color: var(--jap-ink-soft);
+}
+
+.jap-userbar a {
+	color: var(--jap-ink);
+	text-underline-offset: 3px;
+}
+
+.jap-dashboard h2 {
+	margin: 0 0 4px;
+	letter-spacing: -0.02em;
+}
+
+.jap-count {
+	margin: 0 0 20px;
+	font-size: 13px;
+	color: var(--jap-ink-soft);
+}
+
+/* ---------- Filterreiter ---------- */
+.jap-filters {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin: 0 0 22px;
+	padding: 0;
+	list-style: none;
+}
+
+.jap-filters a {
+	display: inline-block;
+	padding: 7px 15px;
+	font-size: 13px;
+	font-weight: 500;
+	text-decoration: none;
+	color: var(--jap-ink-soft);
+	background: var(--jap-paper);
+	border: 1px solid var(--jap-line);
+	border-radius: 999px;
+	transition: border-color .15s ease, color .15s ease;
+}
+
+.jap-filters a:hover {
+	color: var(--jap-ink);
+	border-color: var(--jap-ink-soft);
+}
+
+.jap-filters a[aria-current="page"] {
+	color: var(--jap-paper);
+	background: var(--jap-ink);
+	border-color: var(--jap-ink);
+}
+
+/* ---------- Jobkarte mit Score-Reiter ---------- */
+.jap-job-card {
+	display: flex;
+	align-items: stretch;
+	background: var(--jap-paper);
+	border: 1px solid var(--jap-line);
+	border-radius: var(--jap-radius);
+	overflow: hidden;
+	margin-bottom: 14px;
+}
+
+.jap-score-tab {
+	flex: 0 0 68px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 2px;
+	padding: 18px 6px;
+	color: #fff;
+	background: var(--jap-off);
+}
+
+.jap-score-tab--strong { background: var(--jap-go); }
+.jap-score-tab--mid    { background: var(--jap-signal); color: #3A2A00; }
+.jap-score-tab--weak   { background: var(--jap-off); }
+
+.jap-score-num {
+	font-size: 26px;
+	font-weight: 700;
+	line-height: 1;
+	letter-spacing: -0.03em;
+}
+
+.jap-score-cap {
+	font-size: 9px;
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	opacity: .85;
+}
+
+.jap-job-body {
+	flex: 1 1 auto;
+	min-width: 0;
+	padding: 18px 20px;
+}
+
+.jap-job-body h3 {
+	margin: 0 0 8px;
+	font-size: 18px;
+	line-height: 1.3;
+	letter-spacing: -0.01em;
+}
+
+.jap-job-meta {
+	margin: 0 0 12px;
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--jap-ink-soft);
+}
+
+.jap-job-meta span + span::before {
+	content: "·";
+	margin: 0 7px;
+	opacity: .6;
+}
+
+.jap-job-reason {
+	margin: 0 0 14px;
+	font-size: 14px;
+	line-height: 1.55;
+	color: #38445C;
+}
+
+.jap-job-links {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin: 0 0 14px;
+}
+
+.jap-job-links a {
+	display: inline-block;
+	padding: 6px 12px;
+	font-size: 13px;
+	font-weight: 500;
+	text-decoration: none;
+	color: var(--jap-ink);
+	background: var(--jap-canvas);
+	border-radius: 6px;
+	transition: background .15s ease;
+}
+
+.jap-job-links a:hover {
+	background: #E1E6EF;
+}
+
+.jap-job-foot {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	align-items: center;
+	justify-content: space-between;
+	padding-top: 12px;
+	border-top: 1px solid var(--jap-line);
+}
+
+.jap-date {
+	font-size: 12px;
+	color: var(--jap-off);
+}
+
+.jap-status-form {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: center;
+	margin: 0;
+}
+
+.jap-status-mark {
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: 0.07em;
+	text-transform: uppercase;
+}
+
+.jap-status-mark--go  { color: var(--jap-go); }
+.jap-status-mark--off { color: var(--jap-off); }
+
+/* ---------- Leerer Zustand: eine Einladung, kein Achselzucken ---------- */
+.jap-empty {
+	padding: 34px 24px;
+	text-align: center;
+	background: var(--jap-canvas);
+	border-radius: var(--jap-radius);
+}
+
+.jap-empty p {
+	margin: 0;
+	font-size: 15px;
+	color: var(--jap-ink-soft);
+}
+
+.jap-version {
+	margin: 22px 0 0;
+	font-size: 11px;
+	color: #A9B1C0;
+}
+
+/* ---------- Klein ---------- */
+@media (max-width: 560px) {
+	.jap-job-card { flex-direction: column; }
+
+	.jap-score-tab {
+		flex-direction: row;
+		gap: 8px;
+		padding: 9px 16px;
+	}
+
+	.jap-score-num { font-size: 19px; }
+	.jap-job-body  { padding: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.jap-form-wrapper *,
+	.jap-dashboard * { transition: none !important; }
+}
+
+/* ---------- Mehrfachauswahl: Studienbereiche ---------- */
+.jap-checks {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+	gap: 8px;
+}
+
+.jap-check {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 11px 13px;
+	margin: 0;
+	font-size: 14px;
+	font-weight: 400;
+	letter-spacing: 0;
+	text-transform: none;
+	color: var(--jap-ink);
+	background: var(--jap-paper);
+	border: 1px solid var(--jap-line);
+	border-radius: 8px;
+	cursor: pointer;
+	transition: border-color .15s ease, background .15s ease;
+}
+
+.jap-check:hover {
+	border-color: var(--jap-ink-soft);
+	background: var(--jap-canvas);
+}
+
+.jap-check input[type="checkbox"] {
+	flex: 0 0 auto;
+	width: 17px;
+	height: 17px;
+	margin: 0;
+	accent-color: var(--jap-ink);
+	cursor: pointer;
+}
+
+.jap-check:has(input:checked) {
+	border-color: var(--jap-ink);
+	background: var(--jap-canvas);
+	font-weight: 600;
+}
+
+.jap-check input:focus-visible {
+	outline: 2px solid var(--jap-ink);
+	outline-offset: 2px;
+}
+
+/* ---------- Bewerbungs-Knopf ---------- */
+.jap-mail-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	align-items: center;
+	margin: 0 0 14px;
+}
+
+.jap-mail-btn {
+	text-decoration: none;
+	background: var(--jap-go);
+	border-color: var(--jap-go);
+	color: #fff;
+}
+
+.jap-mail-btn:hover {
+	background: #0E5D4A;
+	border-color: #0E5D4A;
+	color: #fff;
+}
+
+.jap-mail-hint {
+	font-size: 12px;
+	color: var(--jap-ink-soft);
+	flex: 1 1 180px;
+}
+
+.jap-mail-btn--off {
+	background: #E4E7ED;
+	border-color: #E4E7ED;
+	color: #98A1B0;
+	cursor: not-allowed;
+}
+
+.jap-mail-btn--off:hover {
+	background: #E4E7ED;
+	border-color: #E4E7ED;
+	color: #98A1B0;
+}
+
+/* ---------- Einstellungsseite ---------- */
+.jap-section-title {
+	margin: 34px 0 6px;
+	padding-bottom: 8px;
+	font-size: 16px;
+	letter-spacing: -0.01em;
+	border-bottom: 1px solid var(--jap-line);
+}
+
+.jap-section-title:first-child {
+	margin-top: 0;
+}
+
+.jap-hint a {
+	color: var(--jap-ink);
+	text-underline-offset: 3px;
+}
+
+.jap-hint.jap-ok   { color: var(--jap-go); }
+.jap-hint.jap-warn { color: #9A6300; }
+
+/* =========================================================
+   Landing page
+   Layout bewusst ohne 100vw-Tricks: das Theme zentriert den
+   Inhalt nicht zuverlaessig, deshalb bringt die Seite ihre
+   eigene Breite mit und richtet alles selbst aus.
+   ========================================================= */
+.jap-home {
+	--ink:     #0B1220;
+	--paper:   #FFFFFF;
+	--canvas:  #F4F6FA;
+	--line:    #E1E6EF;
+	--muted:   #5A6880;
+	--body:    #46536B;
+	--volt:    #4C7DFF;
+	--mint:    #3FD9A4;
+
+	--sans: ui-sans-serif, -apple-system, "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
+
+	box-sizing: border-box;
+	width: 100%;
+	max-width: 1000px;
+	margin: 0 auto;
+	padding: 0 20px;
+	font-family: var(--sans);
+	color: var(--ink);
+	text-align: left;
+}
+
+.jap-home *,
+.jap-home *::before,
+.jap-home *::after { box-sizing: border-box; }
+
+.jap-home h1,
+.jap-home h2,
+.jap-home h3,
+.jap-home p,
+.jap-home a,
+.jap-home span,
+.jap-home strong,
+.jap-home li,
+.jap-home em { font-family: var(--sans); }
+
+/* ---------- Hero ---------- */
+.jap-hero {
+	background:
+		radial-gradient(110% 130% at 8% 0%, #22375F 0%, transparent 60%),
+		radial-gradient(90% 100% at 100% 8%, #1D4E7A 0%, transparent 58%),
+		linear-gradient(160deg, #0B1220 0%, #111D33 100%);
+	color: #EAF0FA;
+	border-radius: 22px;
+	padding: clamp(36px, 5vw, 64px);
+	margin-bottom: 20px;
+}
+
+.jap-hero-inner { max-width: 700px; }
+
+.jap-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 9px;
+	margin: 0 0 22px;
+	padding: 8px 15px 8px 12px;
+	font-size: 13px;
+	font-weight: 600;
+	color: #C9F5E4;
+	background: rgba(63, 217, 164, .1);
+	border: 1px solid rgba(63, 217, 164, .3);
+	border-radius: 999px;
+}
+
+.jap-dot {
+	flex: 0 0 auto;
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--mint);
+	box-shadow: 0 0 0 4px rgba(63, 217, 164, .18);
+}
+
+.jap-hero h1 {
+	margin: 0 0 20px;
+	font-size: clamp(32px, 4.4vw, 52px);
+	font-weight: 800;
+	line-height: 1.06;
+	letter-spacing: -0.03em;
+	color: #FFFFFF;
+}
+
+.jap-lead {
+	margin: 0 0 30px;
+	max-width: 54ch;
+	font-size: clamp(15px, 1.3vw, 17px);
+	line-height: 1.62;
+	color: #A9B8D0;
+}
+
+.jap-cta-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	margin: 0;
+}
+
+.jap-cta {
+	display: inline-block;
+	padding: 14px 26px;
+	font-size: 15px;
+	font-weight: 650;
+	line-height: 1.2;
+	text-decoration: none;
+	color: #08101F;
+	background: var(--mint);
+	border: 1px solid var(--mint);
+	border-radius: 10px;
+	transition: transform .12s ease, box-shadow .15s ease, background .15s ease;
+}
+
+.jap-cta:hover {
+	background: #35C593;
+	color: #08101F;
+	transform: translateY(-1px);
+	box-shadow: 0 8px 22px rgba(63, 217, 164, .22);
+}
+
+.jap-cta--ghost {
+	color: #EAF0FA;
+	background: transparent;
+	border-color: rgba(234, 240, 250, .28);
+}
+
+.jap-cta--ghost:hover {
+	background: rgba(234, 240, 250, .07);
+	color: #FFFFFF;
+	box-shadow: none;
+}
+
+.jap-cta:focus-visible {
+	outline: 2px solid var(--mint);
+	outline-offset: 3px;
+}
+
+/* ---------- Stat strip ---------- */
+.jap-stats {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 16px;
+	margin-top: 40px;
+	padding-top: 24px;
+	border-top: 1px solid rgba(234, 240, 250, .14);
+	max-width: 520px;
+}
+
+.jap-stats div {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 0;
+}
+
+.jap-stats strong {
+	font-size: clamp(19px, 2vw, 24px);
+	font-weight: 750;
+	letter-spacing: -0.02em;
+	color: #FFFFFF;
+}
+
+.jap-stats span {
+	font-size: 12px;
+	line-height: 1.35;
+	color: #8798B4;
+}
+
+/* ---------- Bands ---------- */
+.jap-band {
+	padding: clamp(30px, 4vw, 46px) 0 0;
+}
+
+.jap-h2 {
+	margin: 0 0 22px;
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--muted);
+}
+
+/* ---------- Steps ---------- */
+.jap-step-list {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.jap-step-list li {
+	display: flex;
+	gap: 18px;
+	padding: 0 0 26px;
+	position: relative;
+}
+
+.jap-step-list li:last-child { padding-bottom: 0; }
+
+.jap-step-list li:not(:last-child)::before {
+	content: "";
+	position: absolute;
+	left: 20px;
+	top: 46px;
+	bottom: 6px;
+	width: 2px;
+	background: linear-gradient(var(--volt), rgba(76, 125, 255, 0));
+}
+
+.jap-step-num {
+	flex: 0 0 42px;
+	height: 42px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 16px;
+	font-weight: 750;
+	color: #FFFFFF;
+	background: var(--volt);
+	border-radius: 12px;
+	position: relative;
+	z-index: 1;
+}
+
+.jap-step-list h3 {
+	margin: 8px 0 6px;
+	font-size: clamp(17px, 1.7vw, 20px);
+	font-weight: 700;
+	letter-spacing: -0.015em;
+}
+
+.jap-step-list p {
+	margin: 0;
+	font-size: 15px;
+	line-height: 1.62;
+	color: var(--body);
+	max-width: 62ch;
+}
+
+/* ---------- Value cards: immer sauberes Raster ---------- */
+.jap-why-grid {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 16px;
+}
+
+@media (min-width: 700px) {
+	.jap-why-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.jap-why-item {
+	padding: 24px;
+	background: var(--paper);
+	border: 1px solid var(--line);
+	border-radius: 14px;
+	transition: transform .15s ease, box-shadow .15s ease;
+}
+
+.jap-why-item:hover {
+	transform: translateY(-2px);
+	box-shadow: 0 10px 28px rgba(11, 18, 32, .07);
+}
+
+.jap-why-item h3 {
+	margin: 0 0 9px;
+	font-size: 17px;
+	font-weight: 700;
+	letter-spacing: -0.01em;
+}
+
+.jap-why-item h3::before {
+	content: "";
+	display: block;
+	width: 26px;
+	height: 3px;
+	margin-bottom: 13px;
+	border-radius: 2px;
+	background: var(--volt);
+}
+
+.jap-why-item p {
+	margin: 0;
+	font-size: 14.5px;
+	line-height: 1.62;
+	color: var(--body);
+}
+
+/* ---------- Personal note ---------- */
+.jap-note {
+	padding: 28px 30px;
+	background: var(--canvas);
+	border: 1px solid var(--line);
+	border-left: 4px solid var(--mint);
+	border-radius: 14px;
+}
+
+.jap-note .jap-h2 { margin-bottom: 14px; }
+
+.jap-note p {
+	margin: 0 0 13px;
+	font-size: 15px;
+	line-height: 1.65;
+	color: var(--body);
+	max-width: 66ch;
+}
+
+.jap-note p:last-child { margin-bottom: 0; }
+
+.jap-note em {
+	font-style: normal;
+	font-weight: 700;
+	color: var(--ink);
+}
+
+/* ---------- Final CTA ---------- */
+.jap-final {
+	margin: clamp(30px, 4vw, 46px) 0 0;
+	padding: clamp(36px, 5vw, 56px);
+	background: linear-gradient(160deg, #0B1220 0%, #111D33 100%);
+	border-radius: 22px;
+	color: #EAF0FA;
+	text-align: center;
+}
+
+.jap-final h2 {
+	margin: 0 auto 10px;
+	max-width: 20ch;
+	font-size: clamp(22px, 3vw, 32px);
+	font-weight: 800;
+	line-height: 1.15;
+	letter-spacing: -0.025em;
+	color: #FFFFFF;
+}
+
+.jap-final p {
+	margin: 0 auto 22px;
+	font-size: 15px;
+	color: #A9B8D0;
+}
+
+.jap-final .jap-cta-row { justify-content: center; }
+
+@media (max-width: 560px) {
+	.jap-home { padding: 0 14px; }
+	.jap-hero { padding: 28px 22px; border-radius: 18px; }
+	.jap-stats { grid-template-columns: 1fr; gap: 12px; }
+	.jap-note { padding: 22px 20px; }
+	.jap-cta { flex: 1 1 auto; text-align: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.jap-home * { transition: none !important; }
+}
+
+/* ---------- Statusbox in den Einstellungen ---------- */
+.jap-status-box {
+	padding: 16px 18px;
+	margin: 0 0 26px;
+	border-radius: 10px;
+	border-left: 4px solid var(--jap-line);
+	background: var(--jap-canvas);
+}
+
+.jap-status-box strong {
+	display: block;
+	margin-bottom: 4px;
+	font-size: 15px;
+}
+
+.jap-status-box p {
+	margin: 0;
+	font-size: 14px;
+	line-height: 1.55;
+	color: #46536B;
+}
+
+.jap-status-box--warn {
+	border-left-color: #E3A008;
+	background: #FDF6E5;
+}
+
+.jap-status-box--ok {
+	border-left-color: var(--jap-go);
+	background: #EAF4F0;
+}
+
+/* ---------- Hero mit Bild ---------- */
+.jap-hero-grid {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 28px;
+	align-items: center;
+}
+
+@media (min-width: 820px) {
+	.jap-hero-grid { grid-template-columns: 1.25fr 0.75fr; gap: 40px; }
+}
+
+.jap-hero-text { min-width: 0; }
+
+.jap-hero-photo {
+	margin: 0;
+	border-radius: 16px;
+	overflow: hidden;
+	box-shadow: 0 18px 44px rgba(0, 0, 0, .34);
+	position: relative;
+}
+
+.jap-hero-photo::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	background: linear-gradient(200deg, rgba(11, 18, 32, 0) 45%, rgba(11, 18, 32, .45) 100%);
+}
+
+.jap-hero-photo img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	max-height: 380px;
+	object-fit: cover;
+	object-position: center 40%;
+}
+
+.jap-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 100%; }
+
+@media (min-width: 700px) {
+	.jap-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+/* ---------- Beweis-Screenshot ---------- */
+.jap-shot {
+	margin: 0;
+	padding: 14px;
+	background: var(--paper);
+	border: 1px solid var(--line);
+	border-radius: 16px;
+}
+
+.jap-shot img {
+	display: block;
+	width: 100%;
+	height: auto;
+	border-radius: 10px;
+	border: 1px solid var(--line);
+}
+
+.jap-shot figcaption {
+	margin-top: 14px;
+	padding: 0 4px;
+	font-size: 13.5px;
+	line-height: 1.6;
+	color: var(--muted);
+}
+
+/* ---------- Quellen ---------- */
+.jap-sources {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 16px;
+}
+
+@media (min-width: 700px) {
+	.jap-sources { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.jap-source {
+	padding: 24px;
+	background: var(--paper);
+	border: 1px solid var(--line);
+	border-left: 4px solid var(--volt);
+	border-radius: 14px;
+}
+
+.jap-source h3 {
+	margin: 0 0 9px;
+	font-size: 17px;
+	font-weight: 700;
+	letter-spacing: -0.01em;
+}
+
+.jap-source p {
+	margin: 0;
+	font-size: 14.5px;
+	line-height: 1.62;
+	color: var(--body);
+}
+
+.jap-sources-note {
+	margin: 16px 0 0;
+	font-size: 13.5px;
+	line-height: 1.6;
+	color: var(--muted);
+}
+
+/* ---------- FAQ ---------- */
+.jap-faq {
+	border-top: 1px solid var(--line);
+}
+
+.jap-faq details {
+	border-bottom: 1px solid var(--line);
+}
+
+.jap-faq summary {
+	list-style: none;
+	cursor: pointer;
+	padding: 17px 34px 17px 0;
+	font-size: 16px;
+	font-weight: 650;
+	letter-spacing: -0.01em;
+	color: var(--ink);
+	position: relative;
+}
+
+.jap-faq summary::-webkit-details-marker { display: none; }
+
+.jap-faq summary::after {
+	content: "+";
+	position: absolute;
+	right: 6px;
+	top: 50%;
+	transform: translateY(-50%);
+	font-size: 20px;
+	font-weight: 400;
+	color: var(--volt);
+	line-height: 1;
+}
+
+.jap-faq details[open] summary::after { content: "\2013"; }
+
+.jap-faq summary:hover { color: var(--volt); }
+
+.jap-faq details p {
+	margin: 0;
+	padding: 0 40px 20px 0;
+	font-size: 15px;
+	line-height: 1.65;
+	color: var(--body);
+	max-width: 68ch;
+}
+
+@media (max-width: 560px) {
+	.jap-hero-photo img { max-height: 260px; }
+	.jap-shot { padding: 10px; }
+	.jap-source { padding: 20px; }
+}
+
+/* ---------- Kontaktformular ---------- */
+.jap-form-wrapper textarea {
+	width: 100%;
+	box-sizing: border-box;
+	padding: 11px 13px;
+	font-family: inherit;
+	font-size: 15px;
+	line-height: 1.55;
+	color: var(--jap-ink);
+	background: var(--jap-paper);
+	border: 1px solid var(--jap-line);
+	border-radius: 8px;
+	resize: vertical;
+	transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.jap-form-wrapper textarea:focus {
+	outline: none;
+	border-color: var(--jap-ink);
+	box-shadow: 0 0 0 3px rgba(18, 32, 58, .12);
+}
+
+/* Spamfalle: fuer Menschen unsichtbar, fuer Screenreader ausgeblendet. */
+.jap-trap {
+	position: absolute;
+	left: -9999px;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+}
+
+/* ---------- Rechtstexte ---------- */
+.jap-legal {
+	--jap-ink: #12203A;
+	--jap-line: #D8DEE8;
+	--jap-canvas: #EDF0F5;
+	--jap-go: #12715A;
+	max-width: 720px;
+	margin: 0 auto;
+	color: #12203A;
+	text-align: left;
+}
+
+.jap-legal h2 {
+	margin: 0 0 6px;
+	letter-spacing: -0.02em;
+}
+
+.jap-legal-sub {
+	margin: 0 0 30px;
+	font-size: 14px;
+	color: #5A6880;
+}
+
+.jap-legal h3 {
+	margin: 30px 0 10px;
+	font-size: 16px;
+	font-weight: 700;
+	letter-spacing: -0.01em;
+	padding-bottom: 7px;
+	border-bottom: 1px solid #D8DEE8;
+}
+
+.jap-legal p,
+.jap-legal li {
+	font-size: 15px;
+	line-height: 1.68;
+	color: #38445C;
+}
+
+.jap-legal p { margin: 0 0 13px; }
+
+.jap-legal ul {
+	margin: 0 0 13px;
+	padding-left: 20px;
+}
+
+.jap-legal li { margin-bottom: 8px; }
+
+.jap-legal strong { color: #12203A; }
+
+.jap-legal code {
+	padding: 2px 6px;
+	font-size: 13px;
+	background: #EDF0F5;
+	border-radius: 4px;
+}
+
+/* ---------- About-Seite ---------- */
+.jap-about-lead {
+	padding: 20px 22px;
+	margin: 0 0 8px;
+	font-size: 16.5px !important;
+	line-height: 1.6 !important;
+	color: #12203A !important;
+	background: #EDF0F5;
+	border-left: 4px solid #3FD9A4;
+	border-radius: 10px;
+}
+
+/* ---------- Erklaerbox und Schritte ---------- */
+.jap-explain {
+	padding: 18px 20px;
+	margin: 0 0 18px;
+	background: var(--jap-canvas);
+	border-left: 4px solid var(--jap-go);
+	border-radius: 10px;
+}
+
+.jap-explain p {
+	margin: 0 0 10px;
+	font-size: 14.5px;
+	line-height: 1.62;
+	color: #38445C;
+}
+
+.jap-explain p:last-child { margin-bottom: 0; }
+.jap-explain strong { color: var(--jap-ink); }
+
+.jap-steps-box {
+	margin: 10px 0 0;
+	padding: 15px 18px;
+	background: var(--jap-canvas);
+	border-radius: 10px;
+}
+
+.jap-key-link {
+	display: inline-block;
+	margin-bottom: 10px;
+	padding: 7px 14px;
+	font-size: 13px;
+	font-weight: 650;
+	text-decoration: none;
+	color: #fff;
+	background: var(--jap-go);
+	border-radius: 7px;
+}
+
+.jap-key-link:hover { background: #0E5D4A; color: #fff; }
+
+.jap-steps-box ol {
+	margin: 0;
+	padding-left: 20px;
+}
+
+.jap-steps-box li {
+	margin-bottom: 5px;
+	font-size: 13.5px;
+	line-height: 1.55;
+	color: #46536B;
+}
+
+.jap-steps-box li:last-child { margin-bottom: 0; }
+
+.jap-check--danger:has(input:checked) {
+	border-color: #A3271B;
+	background: #FAEEEC;
+	color: #A3271B;
+}
+
+.jap-hint code {
+	padding: 2px 6px;
+	font-size: 12.5px;
+	background: var(--jap-canvas);
+	border-radius: 4px;
+}
+
+/* ---------- Erklaerung im Dashboard ---------- */
+.jap-help {
+	margin: 0 0 18px;
+	padding: 0;
+	border: 1px solid var(--jap-line);
+	border-radius: 10px;
+	background: var(--jap-paper);
+}
+
+.jap-help summary {
+	list-style: none;
+	cursor: pointer;
+	padding: 12px 16px;
+	font-size: 13.5px;
+	font-weight: 600;
+	color: var(--jap-ink);
+	position: relative;
+}
+
+.jap-help summary::-webkit-details-marker { display: none; }
+
+.jap-help summary::after {
+	content: "+";
+	position: absolute;
+	right: 16px;
+	top: 50%;
+	transform: translateY(-50%);
+	font-size: 17px;
+	font-weight: 400;
+	color: var(--jap-ink-soft);
+	line-height: 1;
+}
+
+.jap-help[open] summary::after { content: "\2013"; }
+
+.jap-help ul {
+	margin: 0;
+	padding: 0 18px 4px 34px;
+}
+
+.jap-help li {
+	margin-bottom: 6px;
+	font-size: 13.5px;
+	line-height: 1.55;
+	color: #46536B;
+}
+
+.jap-help p {
+	margin: 0;
+	padding: 4px 18px 14px;
+	font-size: 13px;
+	line-height: 1.55;
+	color: var(--jap-ink-soft);
+}
+
+.jap-status-box--alarm {
+	border-left-color: #A3271B;
+	background: #FAEEEC;
+}
+
+.jap-status-box--alarm strong { color: #A3271B; }
