@@ -1,0 +1,1430 @@
+{
+  "name": "apify",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8,11,14,18 * * *"
+            }
+          ]
+        }
+      },
+      "id": "1b5e539c-d17f-40b5-9f41-abdc359bfd25",
+      "name": "Taeglich 8, 11, 14, 18 Uhr",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -3072,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {
+          "joinPages": true
+        }
+      },
+      "id": "c891a7da-0efe-49df-aaa1-5ac3e5e5a46e",
+      "name": "Extract Master CV",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -1744,
+        1088
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aus dem gemeinsamen Job-Pool die passenden Stellen fuer DIESEN Kunden waehlen.\n// Reine Rechenarbeit (Textstatistik, keine externe KI), kostet keine Tokens.\nvar k = $json;\n\nvar pool = [];\ntry { pool = $('Job-Pool bilden').first().json.pool || []; } catch (e) { pool = []; }\n\nif (!pool.length) {\n  return [{ json: { no_jobs_found: true } }];\n}\n\nvar FENSTER_MIN = 10080;\nvar MAX_BEWERTEN = 6;\n\nvar keywords = Array.isArray(k.kunde_keywords) ? k.kunde_keywords : [];\nvar arten    = Array.isArray(k.kunde_arten) ? k.kunde_arten : [];\n// Kunde kann jetzt mehrere Staedte gewaehlt haben (\"Leipzig, Berlin\").\nvar staedteListe = String(k.kunde_standort || '').toLowerCase().split(',').map(function (s) { return s.split('(')[0].trim(); }).filter(Boolean);\nvar remote   = k.kunde_remote === true;\n\nvar HAUPT = 14;\nvar haupt = keywords.slice(0, HAUPT).map(function (w) { return String(w).toLowerCase(); });\nvar neben = keywords.slice(HAUPT).map(function (w) { return String(w).toLowerCase(); });\n\nfunction hatWort(text, wort) {\n  if (!wort) return false;\n  var esc = wort.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\n  var re = new RegExp('(?:^|[^a-z0-9\\u00e4\\u00f6\\u00fc\\u00df])' + esc + '(?:$|[^a-z0-9\\u00e4\\u00f6\\u00fc\\u00df])', 'i');\n  return re.test(text);\n}\n\nvar ZU_GENERISCH = ['projektmanagement', 'logistikmanagement', 'sicherheitsüberwachung', 'e-commerce', 'webdesign', 'kundenbetreuung'];\n\nvar artMap = {\n  werkstudent: ['werkstudent', 'working student'], teilzeit: ['teilzeit'], praktikum: ['praktik'],\n  minijob: ['minijob', 'aushilfe', 'nebenjob'], vollzeit: ['vollzeit'],\n  abschluss: ['abschlussarbeit', 'bachelorarbeit', 'masterarbeit']\n};\nvar artWoerter = [];\narten.forEach(function (a) { (artMap[a] || []).forEach(function (w) { artWoerter.push(w); }); });\n\nfunction hatHarteAnforderung(job) {\n  var t = (String(job.title || '') + ' ' + String(job.description || '')).toLowerCase();\n  var muster = [\n    /\\babgeschlossenes?\\s+(bachelor|master|hochschul|universit[a\\u00e4]ts?|fach-?hochschul)\\w*\\s*(studium|abschluss)/,\n    /abgeschlossene\\s+ausbildung/,\n    /(bachelor|master)abschluss\\s+(zwingend|erforderlich|voraussetzung|vorausgesetzt)/,\n    /mehrj[a\\u00e4]hrige\\s+berufserfahrung/,\n    /mind(estens)?\\.?\\s*\\d+\\s*jahre?\\s*(berufs)?erfahrung/,\n    /berufserfahrung\\s+(zwingend|erforderlich|ist\\s+voraussetzung)/,\n    /\\bsenior\\b/, /\\blead\\b/, /\\bhead of\\b/, /teamleitung/,\n    /nur\\s+vollzeit/, /ausschlie[\\u00dfs]lich\\s+vollzeit/, /100\\s*%\\s*stelle/\n  ];\n  return muster.some(function (p) { return p.test(t); });\n}\n\nfunction istRemoteJob(job) {\n  var t = (String(job.title || '') + ' ' + String(job.description || '') + ' ' +\n           String(job.location || '') + ' ' + String(job.work_model || '')).toLowerCase();\n  return /remote|homeoffice|home office|mobiles arbeiten|telearbeit|ortsunabh/.test(t);\n}\n\nvar IT_STAMM = /software-?entwick|programmier|informatik|frontend|front-end|backend|back-end|full.?stack|data\\s*scien|devops|datenbank|datenpflege|datenerfassung|datenanaly|datenmanagement|datenauswertung|it-support|it-sicherheit|cybersecurity|netzwerktechn|systemadmin|cloud engineer|cloud-entwickl|machine learning|data engineer|data analyst|web-?entwickl|anwendungs-?entwickl|qa engineer|testautomat|it-consultant|softwarearchitekt|digitalisierung|business analy|prozessanaly|it-projekt|helpdesk|help desk|1st.level|2nd.level|erste?n?\\s*level\\s*support|technischer support|it-abteilung|erp-system|sap[\\s-]/i;\n\nfunction fachlichRelevant(job) {\n  var text = (String(job.title || '') + ' ' + String(job.description || '')).toLowerCase();\n  if (IT_STAMM.test(text)) return true;\n  if (hatWort(text, 'ki')) return true;\n  var alle = haupt.concat(neben);\n  for (var i = 0; i < alle.length; i++) {\n    if (!alle[i]) continue;\n    if (ZU_GENERISCH.indexOf(alle[i]) !== -1) continue;\n    if (alle[i].length <= 4 ? hatWort(text, alle[i]) : text.indexOf(alle[i]) !== -1) { return true; }\n  }\n  return false;\n}\n\nvar kandidaten = pool.filter(function (job) {\n  if (!job.title) return false;\n  if (hatHarteAnforderung(job)) return false;\n  var m = job.posted_minutes_ago;\n  if (typeof m === 'number' && m > FENSTER_MIN) return false;\n  if (!fachlichRelevant(job)) return false;\n  if (remote && !istRemoteJob(job)) return false;\n  return true;\n});\n\nif (!kandidaten.length) {\n  return [{ json: { no_jobs_found: true } }];\n}\n\nvar STOPWORDS = ('der die das und mit fuer bei wir sie ist ein eine du dein deine oder auch sind wird werden haben hat ' +\n  'kann koennen nicht als im in am auf zu von an um aus nach ueber unter bis seit waehrend durch ohne gegen wegen ' +\n  'statt ausser dich dir dem den des einer einem einen ihr ihre ihrem euch uns unser unsere man was wo wie so ' +\n  'schon noch mehr sehr nur immer alle alles jede jeder jedes dieser diese dieses solche diesem diesen').split(' ');\nvar STOP = {}; STOPWORDS.forEach(function (w) { STOP[w] = true; });\n\nfunction stem(w) {\n  var suffixe = ['ierungen', 'ierung', 'lichkeit', 'ungen', 'heiten', 'keiten', 'ung', 'heit', 'keit',\n                 'lich', 'isch', 'bar', 'sam', 'innen', 'erin', 'ern', 'en', 'er', 'es', 'em', 'st', 'e'];\n  for (var i = 0; i < suffixe.length; i++) {\n    var s = suffixe[i];\n    if (w.length - s.length >= 4 && w.slice(-s.length) === s) { return w.slice(0, w.length - s.length); }\n  }\n  return w;\n}\n\nfunction tokenize(text) {\n  return String(text || '').toLowerCase()\n    .replace(/[^a-z0-9\\u00e4\\u00f6\\u00fc\\u00df\\s-]/g, ' ')\n    .split(/\\s+/)\n    .filter(function (w) { return w.length > 2 && !STOP[w]; })\n    .map(stem);\n}\n\nfunction buildDF(docs) {\n  var df = {};\n  docs.forEach(function (tokens) {\n    var seen = {};\n    tokens.forEach(function (t) { if (!seen[t]) { seen[t] = true; df[t] = (df[t] || 0) + 1; } });\n  });\n  return df;\n}\nfunction tfVector(tokens) {\n  var tf = {};\n  tokens.forEach(function (t) { tf[t] = (tf[t] || 0) + 1; });\n  var total = tokens.length || 1;\n  Object.keys(tf).forEach(function (t) { tf[t] = tf[t] / total; });\n  return tf;\n}\nfunction tfidfVector(tokens, df, N) {\n  var tf = tfVector(tokens);\n  var vec = {};\n  Object.keys(tf).forEach(function (t) {\n    var idf = Math.log((N + 1) / ((df[t] || 0) + 1)) + 1;\n    vec[t] = tf[t] * idf;\n  });\n  return vec;\n}\nfunction cosine(a, b) {\n  var dot = 0, na = 0, nb = 0;\n  Object.keys(a).forEach(function (t) { na += a[t] * a[t]; if (b[t]) dot += a[t] * b[t]; });\n  Object.keys(b).forEach(function (t) { nb += b[t] * b[t]; });\n  if (na === 0 || nb === 0) return 0;\n  return dot / (Math.sqrt(na) * Math.sqrt(nb));\n}\n\nvar jobDocs = pool.map(function (job) {\n  var titleTok = tokenize(job.title);\n  var descTok = tokenize((job.description || '').slice(0, 800));\n  return titleTok.concat(titleTok).concat(titleTok).concat(descTok);\n});\nvar N = jobDocs.length;\nvar df = buildDF(jobDocs);\nvar jobVecs = jobDocs.map(function (toks) { return tfidfVector(toks, df, N); });\n\nvar queryTeile = keywords.concat(keywords);\nif (k.cv_profil) queryTeile.push(k.cv_profil);\nif (k.cv_kenntnisse) queryTeile.push(k.cv_kenntnisse);\nif (k.cv_studium) queryTeile.push(k.cv_studium);\nvar queryTok = tokenize(queryTeile.join(' '));\nvar queryVec = tfidfVector(queryTok, df, N);\n\nvar poolIndex = {};\npool.forEach(function (job, i) { poolIndex[job.url || (job.title + '|' + job.company)] = i; });\n\nkandidaten.forEach(function (job) {\n  var idx = poolIndex[job.url || (job.title + '|' + job.company)];\n  var sim = (typeof idx === 'number') ? cosine(queryVec, jobVecs[idx]) : 0;\n\n  var bonus = 0;\n  var titel = String(job.title || '').toLowerCase();\n  var ort = String(job.location || '').toLowerCase();\n  for (var j = 0; j < artWoerter.length; j++) { if (titel.indexOf(artWoerter[j]) !== -1) { bonus += 0.01; break; } }\n  for (var s = 0; s < staedteListe.length; s++) {\n    if (staedteListe[s] && staedteListe[s] !== 'deutschland' && ort.indexOf(staedteListe[s]) !== -1) { bonus += 0.012; break; }\n  }\n  if (istRemoteJob(job)) { bonus += remote ? 0.012 : 0.006; }\n  var m2 = job.posted_minutes_ago;\n  if (typeof m2 === 'number') bonus += Math.max(0, 0.005 - (m2 / 1440) * 0.001);\n\n  job.relevanz = Math.round((sim + bonus) * 10000) / 100;\n});\n\nkandidaten.sort(function (a, b) {\n  if (b.relevanz !== a.relevanz) return b.relevanz - a.relevanz;\n  var ma = (typeof a.posted_minutes_ago === 'number') ? a.posted_minutes_ago : 999999;\n  var mb = (typeof b.posted_minutes_ago === 'number') ? b.posted_minutes_ago : 999999;\n  return ma - mb;\n});\n\nvar auswahl = kandidaten.slice(0, MAX_BEWERTEN);\nreturn auswahl.map(function (job) {\n  var kopie = JSON.parse(JSON.stringify(job));\n  kopie.no_jobs_found = false;\n  kopie.freshness_window_min = FENSTER_MIN;\n  return { json: kopie };\n});"
+      },
+      "id": "8d9ce605-60ae-42d1-b58e-732afeccc55b",
+      "name": "Select Freshest & Best Match",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "hasJob",
+              "leftValue": "={{ $json.no_jobs_found }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f26407d8-ab3c-48c7-be62-c1d3c88ab33f",
+      "name": "Has Fresh Job?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        752,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Laeuft pro Stelle einzeln.\nfunction hasHardRequirementKeywords(text) {\n  if (!text) return false;\n  var t = String(text).toLowerCase();\n  var patterns = [\n    /abgeschlossenes?\\s+(bachelor|master|hochschul|universit[aä]ts?|fach-?hochschul)\\w*\\s*(studium|abschluss)/,\n    /abgeschlossene\\s+ausbildung/,\n    /(bachelor|master)abschluss\\s+(zwingend|erforderlich|voraussetzung|vorausgesetzt)/,\n    /mehrj[aä]hrige\\s+berufserfahrung/,\n    /mind(estens)?\\.?\\s*\\d+\\s*jahre?\\s*(berufs)?erfahrung/,\n    /berufserfahrung\\s+(zwingend|erforderlich|ist\\s+voraussetzung)/,\n    /\\bsenior\\b/,\n    /nur\\s+vollzeit/,\n    /ausschlie[ßs]lich\\s+vollzeit/\n  ];\n  return patterns.some(function (p) { return p.test(t); });\n}\n\nvar raw = '';\ntry { raw = $json.choices[0].message.content; } catch (e) { raw = ''; }\n\nvar parsed = {};\ntry { parsed = JSON.parse(raw); } catch (e) {\n  var m = String(raw).match(/\\{[\\s\\S]*\\}/);\n  if (m) { try { parsed = JSON.parse(m[0]); } catch (e2) { parsed = {}; } }\n}\n\nvar job = {};\ntry { job = $('Bewertung vorbereiten').item.json.job || {}; } catch (e) { job = {}; }\n\nvar score = parseInt(parsed.score, 10); if (isNaN(score)) score = 0;\n\nvar keywordViolation = hasHardRequirementKeywords(job.description);\nvar finalViolation = parsed.hard_requirement_violation === true || keywordViolation;\n\nvar decision = parsed.decision || 'reject';\nif (keywordViolation) {\n  decision = 'reject';\n  if (score >= 40) score = 39;\n}\n\nfunction alsText(v) {\n  if (Array.isArray(v)) return v.join(' \\u00b7 ');\n  return String(v || '');\n}\n\nreturn { json: Object.assign({}, job, {\n  score: score,\n  decision: decision,\n  reason: parsed.reason || '',\n  important_requirements: alsText(parsed.important_requirements),\n  missing_requirements: alsText(parsed.missing_requirements),\n  hard_requirement_violation: finalViolation,\n  keyword_violation_detected: keywordViolation\n}) };"
+      },
+      "id": "29805c66-e258-4b0c-a3d4-5c76c0605966",
+      "name": "Merge Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1376,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "function safe(s){ return String(s || '').replace(/[\\\\/:*?\"<>|]/g, '-').slice(0, 80); }\nvar j = $json;\nvar folderName = safe(j.company) + ' - ' + safe(j.title);\nvar today = new Date();\nvar dd = String(today.getDate()).padStart(2,'0');\nvar mm = String(today.getMonth()+1).padStart(2,'0');\nvar yyyy = today.getFullYear();\nreturn { json: Object.assign({}, j, { folder_name: folderName, date_found: today.toISOString().slice(0,10), date_de: dd+'.'+mm+'.'+yyyy }) };"
+      },
+      "id": "2ece1d7f-3a7f-421e-80a3-4efab6db252a",
+      "name": "Compute Folder Name",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1952,
+        -112
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Angepasstes Kurzprofil und Reihenfolge der Kenntnisse uebernehmen.\n// Laeuft pro Stelle einzeln.\nvar raw = '';\ntry { raw = $json.choices[0].message.content; } catch (e) { raw = ''; }\n\nvar a = {};\ntry { a = JSON.parse(raw); } catch (e) {\n  var m = String(raw).match(/\\{[\\s\\S]*\\}/);\n  if (m) { try { a = JSON.parse(m[0]); } catch (e2) { a = {}; } }\n}\n\nvar job = {};\ntry { job = $('Compute Folder Name').item.json || {}; }\ncatch (e) {\n  try { job = $('Compute Folder Name').first().json || {}; } catch (e2) { job = {}; }\n}\n\nvar basis = {};\ntry { basis = $('CV-Daten aufbereiten').first().json.cv || {}; } catch (e) { basis = {}; }\n\n// Kopie anlegen, damit der Ursprung fuer die naechste Stelle unveraendert bleibt.\nvar cv = JSON.parse(JSON.stringify(basis));\n\n// Sicherheitsfilter: Firmenname und 'passt perfekt'-Floskeln aus dem generierten\n// Kurzprofil entfernen, falls das Modell das Verbot im Prompt ignoriert hat.\nfunction bereinigeProfil(text, firma) {\n  if (!text) return text;\n  var t = String(text);\n\n  if (firma) {\n    var namensteile = String(firma).split(/\\s+/).filter(function (w) { return w.length > 3; });\n    namensteile.forEach(function (teil) {\n      var esc = teil.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\n      var re = new RegExp('\\\\b' + esc + '\\\\b', 'gi');\n      t = t.replace(re, '');\n    });\n  }\n\n  var floskeln = [\n    /ideal\\s+f[uü]r[^.]*?\\./gi,\n    /passt\\s+perfekt\\s+zu[^.]*?\\./gi,\n    /macht\\s+ihn\\s+ideal[^.]*?\\./gi,\n    /(,\\s*)?was\\s+(ihn|sie)\\s+ideal[^.,]*?(,|\\.)/gi\n  ];\n  floskeln.forEach(function (re) { t = t.replace(re, ''); });\n\n  // Doppelte Leerzeichen und verwaiste Satzzeichen aufraeumen.\n  t = t.replace(/\\s{2,}/g, ' ').replace(/\\s+([.,])/g, '$1').trim();\n  return t;\n}\n\n// 1. Kurzprofil auf die Stelle zuschneiden (nur wenn brauchbar).\nif (a.profil && String(a.profil).length > 40) {\n  cv.profil = bereinigeProfil(String(a.profil).trim(), job.company);\n}\n\n// 2. Kenntnisse nach Relevanz sortieren - reine Umsortierung, nichts wird ergaenzt.\nif (Array.isArray(a.reihenfolge) && a.reihenfolge.length && Array.isArray(cv.kenntnisse)) {\n  var rang = {};\n  a.reihenfolge.forEach(function (k, i) { rang[String(k).toLowerCase().trim()] = i; });\n  cv.kenntnisse.sort(function (x, y) {\n    var rx = rang[String(x.kategorie).toLowerCase().trim()];\n    var ry = rang[String(y.kategorie).toLowerCase().trim()];\n    if (rx === undefined) rx = 99;\n    if (ry === undefined) ry = 99;\n    return rx - ry;\n  });\n}\n\nreturn { json: Object.assign({}, job, { cv_angepasst: cv }) };"
+      },
+      "id": "7e59b649-c53f-448e-99da-0471e0cd86ca",
+      "name": "Parse Anforderungen Match",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2496,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Laeuft pro Stelle einzeln.\nvar raw = '';\ntry { raw = $json.choices[0].message.content; } catch (e) { raw = ''; }\n\nvar parsed = {};\ntry { parsed = JSON.parse(raw); } catch (e) {\n  var m = String(raw).match(/\\{[\\s\\S]*\\}/);\n  if (m) { try { parsed = JSON.parse(m[0]); } catch (e2) { parsed = {}; } }\n}\n\nvar job = {};\ntry { job = $('Parse Anforderungen Match').item.json || {}; }\ncatch (e) {\n  try { job = $('Parse Anforderungen Match').first().json || {}; } catch (e2) { job = {}; }\n}\n\nreturn { json: Object.assign({}, job, {\n  firma_name: parsed.firma_name || job.company || '',\n  firma_anschrift: parsed.firma_anschrift || '',\n  firma_ort: parsed.firma_ort || '',\n  betreff: parsed.betreff || ('Bewerbung als ' + (job.title || '')),\n  anrede: parsed.anrede || 'Sehr geehrte Damen und Herren,',\n  brieftext: parsed.brieftext || ''\n}) };"
+      },
+      "id": "911a4bd7-5a83-41c4-a66d-b73e2aa07106",
+      "name": "Parse Cover Fields",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3072,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Alles zusammenfuehren, was das Portal braucht.\nvar job  = $('Parse Cover Fields').item.json;\nvar opts = $json;\n\nvar cv = job.cv_angepasst;\nif (!cv) {\n  try { cv = $('CV-Daten aufbereiten').first().json.cv || {}; } catch (e) { cv = {}; }\n}\n\nreturn { json: {\n  title:       job.title,\n  company:     job.company,\n  location:    job.location,\n  work_model:  job.work_model,\n  url:         job.url,\n  score:       job.score,\n  reason:      job.reason,\n  date_found:  job.date_found,\n\n  has_email:         !!opts.has_email,\n  application_email: opts.application_email || '',\n  is_portal:         !!opts.is_portal,\n\n  firma_name:      job.firma_name || job.company,\n  firma_anschrift: job.firma_anschrift || '',\n  firma_ort:       job.firma_ort || '',\n  betreff:         job.betreff || ('Bewerbung als ' + job.title),\n  anrede:          job.anrede || 'Sehr geehrte Damen und Herren,',\n  brieftext:       job.brieftext || '',\n\n  cv_daten: cv\n} };"
+      },
+      "id": "8fca683a-5d35-48ca-885b-a0d8da54b612",
+      "name": "Assemble Record",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4624,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "var job = $('Parse Cover Fields').item.json;\nfunction extractEmail(t) {\n  if (!t) return '';\n  var s = String(t);\n  var m = s.match(/[\\w.+-]+@[\\w-]+\\.[a-zA-Z]{2,}/);\n  if (m) return m[0].toLowerCase();\n  var m2 = s.match(/([\\w.+-]+)\\s*[\\(\\[]?\\s*at\\s*[\\)\\]]?\\s*([\\w-]+)\\s*[\\(\\[]?\\s*dot\\s*[\\)\\]]?\\s*([a-zA-Z]{2,})/i);\n  if (m2) return (m2[1] + '@' + m2[2] + '.' + m2[3]).toLowerCase();\n  return '';\n}\nvar email = extractEmail(job.description);\nreturn { json: { has_email: !!email, application_email: email } };"
+      },
+      "id": "f3c92e9d-3b27-4e5a-87c4-f78b08650c4f",
+      "name": "Extract Email From Description",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3376,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "var job  = $('Parse Cover Fields').item.json;\nvar prev = $json;\n\nfunction isPortalUrl(url) {\n  if (!url) return false;\n  return /myworkday\\.com|personio\\.(de|com)|greenhouse\\.io|lever\\.co|successfactors|smartrecruiters|workable\\.com/i.test(url);\n}\n\nreturn { json: {\n  has_email:         !!prev.has_email,\n  application_email: prev.application_email || '',\n  is_portal:         isPortalUrl(job.url)\n} };"
+      },
+      "id": "b878ec48-5e69-4f2a-8f43-f65d640acf4f",
+      "name": "Detect Application Options",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4272,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "emailFound",
+              "leftValue": "={{ $json.has_email }}",
+              "operator": {
+                "operation": "equals",
+                "type": "boolean"
+              },
+              "rightValue": true
+            }
+          ],
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          }
+        },
+        "options": {}
+      },
+      "id": "80977133-527c-42f1-9dc3-6f0b668e5c51",
+      "name": "Email Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3600,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "function extractEmail(t) {\n  if (!t) return '';\n  var s = String(t);\n  var m = s.match(/[\\w.+-]+@[\\w-]+\\.[a-zA-Z]{2,}/);\n  if (m) return m[0].toLowerCase();\n  var m2 = s.match(/([\\w.+-]+)\\s*[\\(\\[]?\\s*at\\s*[\\)\\]]?\\s*([\\w-]+)\\s*[\\(\\[]?\\s*dot\\s*[\\)\\]]?\\s*([a-zA-Z]{2,})/i);\n  if (m2) return (m2[1] + '@' + m2[2] + '.' + m2[3]).toLowerCase();\n  return '';\n}\nvar body = $json.data !== undefined ? $json.data : ($json.body !== undefined ? $json.body : $json);\nvar text = typeof body === 'string' ? body : JSON.stringify(body);\nvar email = extractEmail(text);\nif (email && /noreply|no-reply|example\\.com|sentry\\.io|googletagmanager|google-analytics/.test(email)) email = '';\nreturn { json: { has_email: !!email, application_email: email } };"
+      },
+      "id": "2656afdf-152a-446e-a77c-1377c097902c",
+      "name": "Extract Email From Full Page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4080,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Parse Cover Fields').item.json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3824,
+        48
+      ],
+      "id": "a4a7ca68-545c-4412-a6fe-972c1472b836",
+      "name": "Fetch Job Page For Email",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://lightseagreen-eagle-971453.hostingersite.com/wp-json/jap/v1/bewerbung",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ email: $('CV-Daten aufbereiten').first().json.kunde_email, job_title: $json.title, company: $json.company, location: $json.location, work_model: $json.work_model, score: $json.score, reason: $json.reason, job_url: $json.url, date_found: $json.date_found, application_email: ($json.has_email ? $json.application_email : ''), cv_daten: $json.cv_daten, anforderungen_match: $json.anforderungen_match, firma_name: $json.firma_name, firma_anschrift: $json.firma_anschrift, firma_ort: $json.firma_ort, betreff: $json.betreff, anrede: $json.anrede, brieftext: $json.brieftext }) }}",
+        "options": {}
+      },
+      "id": "010f5f59-f9dc-41e3-bfad-af2d4ccd43e4",
+      "name": "Send To WordPress Portal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        4832,
+        432
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "atXsUbACdyP0RUd6",
+          "name": "WP Portal Auth"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://lightseagreen-eagle-971453.hostingersite.com/wp-json/jap/v1/kunden",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "options": {}
+      },
+      "id": "c9b35e24-cfd4-4da8-8a24-5b2b3f606451",
+      "name": "Kunden aus WordPress holen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -2880,
+        512
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "atXsUbACdyP0RUd6",
+          "name": "WP Portal Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "2cc9083a-af26-4ec4-9660-20dbeb94f676",
+      "name": "Kunde fuer Kunde",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -2288,
+        1056
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.cv_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "ca9e21f6-1b58-4b69-8436-29330c0af6a4",
+      "name": "Kunden-CV laden",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1888,
+        1088
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "score",
+              "leftValue": "={{ $json.score }}",
+              "operator": {
+                "operation": "gte",
+                "type": "number"
+              },
+              "rightValue": 55
+            },
+            {
+              "id": "keywordOk",
+              "leftValue": "={{ $json.keyword_violation_detected }}",
+              "operator": {
+                "operation": "notEquals",
+                "type": "boolean"
+              },
+              "rightValue": true
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8c4c4c3e-2df6-43ce-bfb9-43444a3c336a",
+      "name": "Stelle geeignet?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1616,
+        -416
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.groq_key }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.payload) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 20000
+            }
+          }
+        }
+      },
+      "id": "13b67143-d263-4b11-8916-08d0f89c64fa",
+      "name": "Groq - Bewertung",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1184,
+        -64
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('CV-Daten aufbereiten').first().json.groq_key }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'openai/gpt-oss-120b', temperature: 0.3, max_tokens: 900, reasoning_format: 'hidden', reasoning_effort: 'low', response_format: { type: 'json_object' }, messages: [ { role: 'system', content: 'Du schreibst den Abschnitt \"Kernkompetenzen\" eines Lebenslaufs, angepasst auf eine konkrete Stelle, OHNE etwas zu erfinden.\\n\\nDATEN DES BEWERBERS:\\nProfil: ' + ($('CV-Daten aufbereiten').first().json.cv_profil || '') + '\\nStudium:\\n' + ($('CV-Daten aufbereiten').first().json.cv_studium || '') + '\\nErfahrung:\\n' + ($('CV-Daten aufbereiten').first().json.cv_erfahrung || '') + '\\nKenntnisse:\\n' + ($('CV-Daten aufbereiten').first().json.cv_kenntnisse || '') + '\\n\\nAUFGABE:\\n1. Schreibe 2 bis 3 Saetze auf Deutsch fuer den Abschnitt \"Kernkompetenzen\". Stelle die fachlichen Staerken des Bewerbers dar, mit Fokus auf konkrete Tools, Technologien oder Faehigkeiten aus der Stellenbeschreibung unten, DIE AUCH TATSAECHLICH in den obigen Kenntnissen/Erfahrungen des Bewerbers vorkommen. Nenne sie beim Namen (z.B. \"Java\", \"Docker\", \"SQL\"), erfinde aber keine, die dort nicht stehen.\\n2. Nenne die Kategorien der Kenntnisse in der Reihenfolge, in der sie fuer diese Stelle am wichtigsten sind.\\n\\nWICHTIG - WIRKT WIE EIN NORMALER LEBENSLAUF, NICHT WIE PRO BEWERBUNG NEU GESCHRIEBEN:\\n- Nenne NIEMALS den Namen der Firma oder des Arbeitgebers aus der Stellenanzeige.\\n- Vermeide Formulierungen wie \"ideal fuer diese Stelle\", \"passt perfekt zu\" oder das woertliche Uebernehmen ungewoehnlicher Begriffe aus der Anzeige (z.B. interne Projekt- oder Produktnamen). Ein Kernkompetenzen-Abschnitt beschreibt die Faehigkeiten des Bewerbers selbst, nicht seine Eignung fuer einen bestimmten Arbeitgeber.\\n\\nVERBOTEN:\\n- Faehigkeiten erfinden, die oben nicht stehen\\n- Erwaehnen, was dem Bewerber fehlt\\n- Zahlen oder Erfolge erfinden\\n- Ein Abschlussdatum nennen\\n\\nAntworte NUR als JSON: {\"profil\": \"der Kernkompetenzen-Text\", \"reihenfolge\": [\"Kategoriename\", \"Kategoriename\"]}' }, { role: 'user', content: 'Titel: ' + $json.title + '\\nFirma: ' + $json.company + '\\nAnforderungen: ' + ($json.important_requirements || '') + '\\nBeschreibung: ' + String($json.description || '').slice(0, 1200) } ] }) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 10000
+            }
+          }
+        }
+      },
+      "id": "831358b9-bef2-4c1b-b30d-f5de79e79b96",
+      "name": "Groq - Anforderungen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2160,
+        -96
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('CV-Daten aufbereiten').first().json.groq_key }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'openai/gpt-oss-120b', temperature: 0.4, max_tokens: 1500, reasoning_format: 'hidden', reasoning_effort: 'low', response_format: { type: 'json_object' }, messages: [ { role: 'system', content: 'Schreibe ein kurzes deutsches Anschreiben nach DIN 5008, maximal 220 Woerter Brieftext, und antworte als JSON.\\n\\nDATEN DES BEWERBERS (die EINZIGEN erlaubten Fakten):\\nProfil: ' + ($('CV-Daten aufbereiten').first().json.cv_profil || '') + '\\nStudium: ' + ($('CV-Daten aufbereiten').first().json.cv_studium || '') + '\\nErfahrung: ' + ($('CV-Daten aufbereiten').first().json.cv_erfahrung || '') + '\\nKenntnisse: ' + ($('CV-Daten aufbereiten').first().json.cv_kenntnisse || '') + '\\n\\nREGELN:\\n- Erfinde NIEMALS Fakten.\\n- Nenne KEIN Abschlussdatum.\\n- Ist die Firmenanschrift unbekannt, lasse firma_anschrift und firma_ort leer.\\n- anrede: Sehr geehrte Damen und Herren, ausser es wird eine Kontaktperson genannt.\\n- brieftext: 2 bis 3 kurze Absaetze, getrennt durch doppelten Zeilenumbruch, ohne Gruss und ohne Schlussformel.\\n\\nJSON-Schluessel: firma_name, firma_anschrift, firma_ort, betreff, anrede, brieftext' }, { role: 'user', content: 'Titel: ' + $json.title + '\\nFirma: ' + $json.company + '\\nOrt: ' + $json.location + '\\nBeschreibung: ' + String($json.description || '').slice(0, 1200) } ] }) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 10000
+            }
+          }
+        }
+      },
+      "id": "290a1472-2eb5-4a53-a89a-34371b3e7d03",
+      "name": "Groq - Anschreiben",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2768,
+        -64
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Kunde fuer Kunde').first().json.api.groq_key }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'openai/gpt-oss-120b', temperature: 0, max_tokens: 3400, reasoning_format: 'hidden', reasoning_effort: 'low', response_format: { type: 'json_object' }, messages: [ { role: 'system', content: 'Du liest einen Lebenslauf und gibst ihn STRUKTURIERT als JSON zurueck.\\n\\nOBERSTE REGEL: Erfinde NICHTS. Uebernimm nur, was woertlich dasteht. Fehlt eine Angabe, lass das Feld leer.\\n\\nAUSGABE-STRUKTUR:\\n{\\n \"name\": \"\",\\n \"titel\": \"aktuelle Rolle, z.B. Student der Angewandten Informatik\",\\n \"geburtsdatum\": \"\",\\n \"adresse\": \"\",\\n \"kontakt\": \"\",\\n \"ort\": \"\",\\n \"profil\": \"\",\\n \"erfahrung\": [ { \"position\": \"\", \"firma\": \"\", \"ort\": \"\", \"zeitraum\": \"\", \"punkte\": [] } ],\\n \"projekte\": [ { \"name\": \"\", \"zusatz\": \"Technologien oder Kontext\", \"punkte\": [] } ],\\n \"bildung\": [ { \"abschluss\": \"\", \"institution\": \"\", \"ort\": \"\", \"zeitraum\": \"\", \"zusatz\": \"\" } ],\\n \"kenntnisse\": [ { \"kategorie\": \"\", \"eintraege\": \"\" } ],\\n \"sprachen\": [ { \"sprache\": \"\", \"niveau\": \"\" } ],\\n \"suchbegriffe\": []\\n}\\n\\nGEBURTSDATUM - SEHR WICHTIG:\\nNur uebernehmen, wenn ausdruecklich \"Geburtsdatum\", \"geboren am\" oder \"geb.\" davorsteht.\\nEin Datum am Ende des Dokuments neben einer Stadt (z.B. \"Halle, 8.8.2026\") ist das\\nUnterschriftsdatum, NIEMALS das Geburtsdatum. Im Zweifel leer lassen.\\n\\nTITEL:\\nDie aktuelle Hauptrolle, meist das laufende Studium. NICHT einen Nebenjob als\\nBerufsbezeichnung verwenden.\\n\\nPROJEKTE - NICHT WEGLASSEN:\\nAbschnitte wie \"Projekte\", \"Studienprojekte\", \"Praxisprojekte\", \"GitHub-Projekte\" oder\\n\"Seminararbeit\" gehoeren in projekte. Sie sind bei Studierenden oft das Wichtigste.\\nHoechstens 6 Eintraege, die fachlich staerksten zuerst.\\n\\nERFAHRUNG:\\nNeueste zuerst, hoechstens 5. Alle genannten Projektbeispiele oder Webseiten einer\\nStation in die punkte uebernehmen, nicht nur zwei davon.\\npunkte NUR aus dem Text. Steht dort nichts, leere Liste.\\n\\nBILDUNG:\\nAlles vor dem Abitur weglassen (Grundschule, Mittelschule, Gymnasium).\\nSprachzertifikate A1 bis C2 gehoeren NICHT hierher, sondern zu sprachen.\\n\\nSPRACHEN:\\nNiveau WOERTLICH uebernehmen. Steht \"Verhandlungssicher\", schreibe \"Verhandlungssicher\"\\nund nicht \"C1\". Nichts umrechnen.\\n\\nSUCHBEGRIFFE - hier darfst du als Einziges mitdenken:\\nLeite 12 bis 15 DEUTSCHE Begriffe ab, unter denen dieser Mensch auf deutschen\\nJobboersen realistisch Stellen finden wuerde. Grundlage sind Studium, Kenntnisse,\\nProjekte und bisherige Taetigkeiten.\\nRegeln:\\n- Nur Begriffe, die in echten deutschen Stellenanzeigen als Berufsbezeichnung oder\\n  Fachgebiet vorkommen (z.B. \"Softwareentwicklung\", \"Kundenbetreuung\", \"Uebersetzung\").\\n- KEINE einzelnen Werkzeuge als Suchbegriff (nicht \"Docker\", nicht \"JUnit\").\\n- KEINE englischen Begriffe, ausser sie sind in Deutschland ueblich (z.B. \"Frontend\").\\n- Auch angrenzende Felder aufnehmen, in denen die Person arbeiten koennte,\\n  nicht nur das Studienfach.\\n- Ein Sprachstudent bekommt z.B.: Uebersetzung, Sprachunterricht, Nachhilfe,\\n  Redaktion, Lektorat, Kundenbetreuung.\\n\\nAntworte NUR mit dem JSON-Objekt.' }, { role: 'user', content: $('Extract Master CV').first().json.text.toString().slice(0, 7000) } ] }) }}",
+        "options": {}
+      },
+      "id": "b428783c-a8bb-40a9-ad7b-7d41cc17bf61",
+      "name": "CV-Daten auslesen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1584,
+        1088
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Strukturierte Lebenslaufdaten lesen und Kundendaten mitreichen.\nvar raw = '';\ntry { raw = $json.choices[0].message.content; } catch (e) { raw = ''; }\n\nvar d = {};\ntry { d = JSON.parse(raw); } catch (e) {\n  var m = String(raw).match(/\\{[\\s\\S]*\\}/);\n  if (m) { try { d = JSON.parse(m[0]); } catch (e2) { d = {}; } }\n}\n\nvar kunde = {};\ntry { kunde = $('Kunde fuer Kunde').first().json || {}; } catch (e) { kunde = {}; }\nvar api = kunde.api || {};\n\nfunction liste(v) { return Array.isArray(v) ? v : []; }\n\nvar raus = /grundschule|mittelschule|gymnasium|realschule|primary school|secondary school|zertifikat\\s*(a1|a2|b1|b2|c1|c2)|^(a1|a2|b1|b2|c1|c2)\\b/i;\nvar bildung = liste(d.bildung).filter(function (b) {\n  return b && b.abschluss && !raus.test(String(b.abschluss));\n});\n\nvar quelltext = '';\ntry { quelltext = String($('Extract Master CV').first().json.text || ''); } catch (e) { quelltext = ''; }\nvar geburtsdatum = d.geburtsdatum || '';\nif (geburtsdatum && !/geburtsdatum|geboren\\s+am|\\bgeb\\./i.test(quelltext)) {\n  geburtsdatum = '';\n}\n\nvar cv = {\n  name:         d.name || kunde.name || '',\n  titel:        d.titel || '',\n  geburtsdatum: geburtsdatum,\n  adresse:      d.adresse || '',\n  kontakt:      d.kontakt || kunde.email || '',\n  ort:          d.ort || '',\n  profil:       d.profil || '',\n  erfahrung:    liste(d.erfahrung),\n  projekte:     liste(d.projekte),\n  bildung:      bildung,\n  kenntnisse:   liste(d.kenntnisse),\n  sprachen:     liste(d.sprachen)\n};\n\n// ---- Ort fuer die Jobboersen aufbereiten ----\n// Wichtig: Im Portal steht der ANZEIGETEXT des Auswahlfelds, z.B.\n// \"Remote / ortsunabhaengig\". So etwas als Stadt an Adzuna zu schicken\n// ergibt null Treffer. Hier wird daraus ein echter Suchort.\nvar rohOrt   = String(kunde.standort || '').trim();\nvar istRemote = kunde.ist_remote === true || /remote|ortsunabh|anywhere|deutschlandweit/i.test(rohOrt);\n\nvar suchOrt;\nif (istRemote || !rohOrt || /^deutschland$/i.test(rohOrt)) {\n  suchOrt = 'Deutschland';\n} else {\n  // Zusaetze wie \"/ anywhere\" abschneiden, Klammern wie \"(Saale)\" behalten.\n  suchOrt = rohOrt.split('/')[0].trim();\n}\n\nif (!cv.ort) { cv.ort = ( 'Deutschland' === suchOrt ) ? '' : suchOrt; }\n\n// ---- Suchbegriffe zusammenfuehren ----\nvar ausKatalog = Array.isArray(kunde.keywords) ? kunde.keywords : [];\nvar ausCV      = liste(d.suchbegriffe).filter(function (w) {\n  var s = String(w || '').trim();\n  return s.length > 3 && !/^(docker|git|junit|sql|h2|linux|grafana|jira|excel)$/i.test(s);\n}).map(function (w) { return String(w).trim(); });\n\nvar gesehen = {};\nvar suchbegriffe = [];\nausKatalog.concat(ausCV).forEach(function (w) {\n  var k = String(w).toLowerCase();\n  if (k && !gesehen[k]) { gesehen[k] = true; suchbegriffe.push(w); }\n});\n\nvar kenntnisseText = cv.kenntnisse.map(function (k) {\n  return k.kategorie + ': ' + (Array.isArray(k.eintraege) ? k.eintraege.join(', ') : k.eintraege);\n}).join('\\n');\n\nvar erfahrungText = cv.erfahrung.map(function (e) {\n  return e.position + ', ' + e.firma + ' (' + (e.zeitraum || '') + ')';\n}).join('\\n');\n\nvar projekteText = cv.projekte.map(function (p) {\n  return p.name + (p.zusatz ? ' - ' + p.zusatz : '');\n}).join('\\n');\n\nvar studiumText = cv.bildung.map(function (b) {\n  return b.abschluss + ', ' + b.institution + ' (' + (b.zeitraum || '') + ')';\n}).join('\\n');\n\nreturn [{ json: {\n  cv: cv,\n\n  cv_name:       cv.name,\n  cv_ort:        cv.ort,\n  cv_profil:     cv.profil,\n  cv_kenntnisse: kenntnisseText,\n  cv_erfahrung:  erfahrungText,\n  cv_projekte:   projekteText,\n  cv_studium:    studiumText,\n\n  kunde_email:      kunde.email || '',\n  kunde_name:       kunde.name || '',\n  kunde_standort:   suchOrt,\n  kunde_standort_roh: rohOrt,\n  kunde_bereich:    kunde.bereich_text || '',\n  kunde_stellenart: kunde.stellenart_text || 'Werkstudent',\n  kunde_keywords:   suchbegriffe,\n  kunde_katalog:    ausKatalog,\n  kunde_aus_cv:     ausCV,\n  kunde_arten:      kunde.stellenarten || [],\n  kunde_remote:     istRemote,\n  kunde_suchweite:  kunde.suchweite || '',\n\n  groq_key:   api.groq_key || '',\n  adzuna_id:  api.adzuna_id || '',\n  adzuna_key: api.adzuna_key || ''\n} }];"
+      },
+      "id": "7a050223-b28c-48e4-b7df-d450b9c5033a",
+      "name": "CV-Daten aufbereiten",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1408,
+        1088
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://rest.arbeitsagentur.de/jobboerse/jobsuche-service/pc/v6/jobs",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "was",
+              "value": "={{ $json.ba_begriff }}"
+            },
+            {
+              "name": "wo",
+              "value": "={{ $json.stadt }}"
+            },
+            {
+              "name": "umkreis",
+              "value": "={{ $json.umkreis }}"
+            },
+            {
+              "name": "angebotsart",
+              "value": "1"
+            },
+            {
+              "name": "veroeffentlichtseit",
+              "value": "2"
+            },
+            {
+              "name": "pav",
+              "value": "false"
+            },
+            {
+              "name": "size",
+              "value": "50"
+            },
+            {
+              "name": "page",
+              "value": "1"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "jobboerse-jobsuche"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1200
+            }
+          },
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "25d8c047-1eee-4143-8614-fe765696129b",
+      "name": "Arbeitsagentur Jobs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -896,
+        416
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Referenznummern aus der BA-Suchantwort holen.\n// Bewusst NICHT nach Teilzeit vorfiltern: die Felder sind nicht zuverlaessig\n// gesetzt, und die KI-Bewertung sortiert unpassende Stellen ohnehin aus.\nvar MAX_DETAILS = 15;\nvar items = $input.all();\nvar out = [];\nvar seen = {};\n\nfor (var idx = 0; idx < items.length; idx++) {\n  var data = items[idx].json || {};\n  if (data.error) continue;\n\n  var list = data.stellenangebote || data.ergebnisliste || [];\n  if (!Array.isArray(list)) continue;\n\n  var wo = '';\n  try { wo = String($('Build Search Queries').all()[idx].json.where || ''); } catch (e) { wo = ''; }\n  var priority = /halle|leipzig|merseburg/i.test(wo) ? 1 : 2;\n\n  for (var i = 0; i < list.length; i++) {\n    if (out.length >= MAX_DETAILS) break;\n    var j = list[i];\n    var refnr = j.refnr || j.referenznummer || '';\n    if (!refnr || seen[refnr]) continue;\n    seen[refnr] = true;\n\n    var ort = '';\n    if (j.arbeitsort) {\n      ort = [j.arbeitsort.ort, j.arbeitsort.region].filter(Boolean).join(', ');\n    } else if (j.stellenlokationen && j.stellenlokationen[0] && j.stellenlokationen[0].adresse) {\n      var ad = j.stellenlokationen[0].adresse;\n      ort = [ad.ort, ad.region].filter(Boolean).join(', ');\n    }\n\n    out.push({ json: {\n      refnr: refnr,\n      refnr_b64: Buffer.from(String(refnr)).toString('base64'),\n      ba_title: j.titel || j.stellenangebotsTitel || j.beruf || '',\n      ba_company: j.arbeitgeber || j.firma || 'Unbekannt',\n      ba_location: ort,\n      ba_published: j.aktuelleVeroeffentlichungsdatum || j.eintrittsdatum ||\n                    j.aenderungsdatum || j.modifikationsTimestamp || '',\n      ba_homeoffice: j.homeofficemoeglich === true,\n      ba_minijob: j.istGeringfuegigeBeschaeftigung === true,\n      priority: priority\n    }});\n  }\n}\nreturn out;"
+      },
+      "id": "b3c1d214-1afc-4dc9-ab68-93ac9139d727",
+      "name": "Extract BA Refnrs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -656,
+        384
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "url": "=https://rest.arbeitsagentur.de/jobboerse/jobsuche-service/pc/v4/jobdetails/{{ $json.refnr_b64 }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "jobboerse-jobsuche"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "2a8df7b7-ce6c-417a-8a7c-81a0e6be4fce",
+      "name": "Arbeitsagentur Job Details",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -448,
+        384
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Wandelt die BA-Detailantwort ins gemeinsame Format um.\nvar items = $input.all();\nvar meta = $('Extract BA Refnrs').all();\nvar out = [];\n\nfor (var i = 0; i < items.length; i++) {\n  var d = items[i].json || {};\n  var m = (meta[i] && meta[i].json) || {};\n\n  var title = d.stellenangebotsTitel || d.titel || m.ba_title || '';\n  if (!title) continue;\n\n  var company = d.arbeitgeber || d.firma || m.ba_company || 'Unbekannt';\n\n  var location = m.ba_location || '';\n  if (!location && d.arbeitsorte && d.arbeitsorte[0]) {\n    var a = d.arbeitsorte[0];\n    location = [a.ort, a.region].filter(Boolean).join(', ');\n  }\n  if (!location) location = 'Deutschland';\n\n  var description = d.stellenangebotsBeschreibung || d.stellenbeschreibung || '';\n\n  var rawDate = d.aenderungsdatum || d.aktuelleVeroeffentlichungsdatum ||\n                d.ersteVeroeffentlichungsdatum || m.ba_published || '';\n  var minutesAgo = null;\n  if (rawDate) {\n    var t = new Date(rawDate).getTime();\n    if (!isNaN(t)) minutesAgo = Math.round((Date.now() - t) / 60000);\n  }\n\n  var parts = [];\n  if (m.ba_minijob) parts.push('Minijob'); else parts.push('Teilzeit');\n  if (m.ba_homeoffice) parts.push('Homeoffice moeglich');\n\n  out.push({ json: {\n    title: title,\n    company: company,\n    location: location,\n    work_model: parts.join(' / '),\n    salary: '',\n    description: description,\n    url: 'https://www.arbeitsagentur.de/jobsuche/jobdetail/' + encodeURIComponent(m.refnr || ''),\n    source: 'Bundesagentur fuer Arbeit',\n    priority: m.priority || 2,\n    posted_at_raw: rawDate,\n    posted_minutes_ago: minutesAgo\n  }});\n}\nreturn out;"
+      },
+      "id": "c70ccf25-d0e7-4ec9-b0a5-aacb44852318",
+      "name": "Normalize Arbeitsagentur",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -144,
+        384
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Laeuft pro Stelle einzeln.\nvar job = $json;\n\nvar k = {};\ntry { k = $('CV-Daten aufbereiten').first().json || {}; } catch (e) { k = {}; }\n\nvar system = [\n  'You rate job postings for students and answer in JSON.',\n  'The job posting is in German, but your answer must be in ENGLISH.',\n  '',\n  'THE APPLICANT:',\n  'Field of work sought: ' + (k.kunde_bereich || 'not specified'),\n  'Type of role: ' + (k.kunde_stellenart || 'working student role'),\n  'Location: ' + (k.kunde_standort || 'Germany'),\n  'Skills: ' + String(k.cv_kenntnisse || '').slice(0, 400),\n  'Still studying, no degree yet, no multi-year professional experience.',\n  '',\n  'ATTITUDE: Be generous. Working student and internship roles are learning roles.',\n  'A missing framework or tool is NOT a reason to reject and must not push the score below 60.',\n  '',\n  'ONLY these four reasons give decision=reject and a score below 40:',\n  '1. A completed degree or completed vocational training is a hard requirement',\n  '2. Multiple years of professional experience are required (or Senior in the title)',\n  '3. The role is full-time only AND the applicant is not looking for full-time',\n  '4. The field is completely unrelated to what the applicant is looking for',\n  '',\n  'SCORING: 85-100 excellent fit, 70-84 good fit with some gaps (normal for students),',\n  '55-69 partial fit, 40-54 weak, 0-39 one of the four reasons applies.',\n  '',\n  'JSON keys: score (0-100), decision (keep or reject), reason (short, ENGLISH),',\n  'important_requirements, missing_requirements, hard_requirement_violation'\n].join('\\n');\n\nvar user = [\n  'Title: ' + (job.title || ''),\n  'Company: ' + (job.company || ''),\n  'Location: ' + (job.location || ''),\n  // Kuerzer als frueher: das Groq-Limit von 8000 Tokens pro Minute\n  // wurde sonst schon nach zwei Stellen erreicht.\n  'Description: ' + String(job.description || '').slice(0, 1400)\n].join('\\n');\n\nreturn { json: {\n  groq_key: k.groq_key || '',\n  job: job,\n  payload: {\n    model: 'openai/gpt-oss-120b',\n    temperature: 0.2,\n    max_tokens: 800,\n    reasoning_format: 'hidden',\n    reasoning_effort: 'low',\n    response_format: { type: 'json_object' },\n    messages: [\n      { role: 'system', content: system },\n      { role: 'user', content: user }\n    ]\n  }\n} };"
+      },
+      "id": "08a4d3c5-bf78-41a1-aca9-ac0cf7c898b0",
+      "name": "Bewertung vorbereiten",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        -64
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "hatName",
+              "leftValue": "={{ $json.cv_name }}",
+              "operator": {
+                "operation": "notEmpty",
+                "singleValue": true,
+                "type": "string"
+              }
+            },
+            {
+              "id": "hatKey",
+              "leftValue": "={{ $json.groq_key }}",
+              "operator": {
+                "operation": "notEmpty",
+                "singleValue": true,
+                "type": "string"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ecf59699-096e-4e9c-8268-4e907a1bc5e4",
+      "name": "CV lesbar?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -368,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://lightseagreen-eagle-971453.hostingersite.com/wp-json/jap/v1/schluessel-problem",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ email: $json.kunde_email, dienst: 'Groq', grund: 'The key was rejected when reading your CV.' }) }}",
+        "options": {}
+      },
+      "id": "162185ee-f289-4e2e-a6f1-c8a52407c191",
+      "name": "Schluesselproblem melden",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -368,
+        720
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "atXsUbACdyP0RUd6",
+          "name": "WP Portal Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Gemeinsame Suche: einmal fuer alle Kunden, nicht pro Kunde.\n// Aus den Betriebsdaten des Portals entsteht eine Liste von Abfragen.\nvar antwort = $json;\nvar sys = antwort.system || {};\nvar staedte = Array.isArray(sys.staedte) && sys.staedte.length\n  ? sys.staedte\n  : [{ stadt: 'Leipzig', umkreis: 50 }, { stadt: 'Berlin', umkreis: 30 }];\n\n// ====== EINSTELLUNG ======\n// Seiten je Stadt. Adzuna liefert 50 Treffer pro Seite.\n// Bei 2 Staedten und 2 Seiten sind das 4 Abfragen pro Durchlauf,\n// bei 4 Laeufen taeglich rund 480 im Monat - das Limit liegt bei 1000.\nvar SEITEN_JE_STADT = 2;\n// =========================\n\n// Keine Fachrichtung im Filter: wir sammeln alles, was fuer Studierende\n// in Frage kommt. Die Zuordnung zum passenden Kunden passiert spaeter.\nvar stellenarten = 'Werkstudent Werkstudentin Praktikum Praktikant Teilzeit Minijob Aushilfe Nebenjob Studentenjob Werkstudierende';\n\nvar abfragen = [];\nfor (var i = 0; i < staedte.length; i++) {\n  for (var seite = 1; seite <= SEITEN_JE_STADT; seite++) {\n    abfragen.push({ json: {\n      stadt:      staedte[i].stadt,\n      umkreis:    String(staedte[i].umkreis || 30),\n      seite:      seite,\n      what_or:    stellenarten,\n      adzuna_id:  sys.adzuna_id || '',\n      adzuna_key: sys.adzuna_key || ''\n    }});\n  }\n}\n\nreturn abfragen;"
+      },
+      "id": "75d2cf2a-27cf-4d98-b96f-3f6066661f4f",
+      "name": "Suchliste bauen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1936,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.adzuna.com/v1/api/jobs/de/search/{{ $json.seite }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "app_id",
+              "value": "={{ $json.adzuna_id }}"
+            },
+            {
+              "name": "app_key",
+              "value": "={{ $json.adzuna_key }}"
+            },
+            {
+              "name": "what_or",
+              "value": "={{ $json.what_or }}"
+            },
+            {
+              "name": "where",
+              "value": "={{ $json.stadt }}"
+            },
+            {
+              "name": "distance",
+              "value": "={{ $json.umkreis }}"
+            },
+            {
+              "name": "results_per_page",
+              "value": "50"
+            },
+            {
+              "name": "max_days_old",
+              "value": "2"
+            },
+            {
+              "name": "sort_by",
+              "value": "date"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1500
+            }
+          }
+        }
+      },
+      "id": "e28645b2-79b8-47a4-a4b4-c4a1684de98c",
+      "name": "Adzuna gemeinsam",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1712,
+        272
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 3000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Adzuna-Antworten ins gemeinsame Format bringen.\nvar items = $input.all();\nvar anfragen = $('Suchliste bauen').all();\nvar out = [];\n\nfor (var idx = 0; idx < items.length; idx++) {\n  var data = items[idx].json || {};\n  if (data.error) continue;\n\n  var res = data.results || [];\n  if (!Array.isArray(res)) continue;\n\n  var stadt = '';\n  try { stadt = anfragen[idx].json.stadt; } catch (e) { stadt = ''; }\n\n  for (var i = 0; i < res.length; i++) {\n    var r = res[i];\n    var postedMs = r.created ? new Date(r.created).getTime() : null;\n    var minutesAgo = (postedMs && !isNaN(postedMs)) ? Math.round((Date.now() - postedMs) / 60000) : null;\n\n    out.push({ json: {\n      title: r.title || '',\n      company: (r.company && r.company.display_name) || '',\n      location: (r.location && r.location.display_name) || stadt,\n      such_stadt: stadt,\n      work_model: r.contract_time === 'part_time' ? 'Teilzeit' : (r.contract_time === 'full_time' ? 'Vollzeit' : 'Unbekannt'),\n      salary: '',\n      description: r.description || '',\n      url: (r.redirect_url || '').trim(),\n      source: 'Adzuna',\n      posted_at_raw: r.created || '',\n      posted_minutes_ago: minutesAgo\n    }});\n  }\n}\nreturn out;"
+      },
+      "id": "12cc941f-33f2-4af7-b77c-074fbcb440b4",
+      "name": "Adzuna aufbereiten",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1488,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Die Arbeitsagentur verknuepft Suchbegriffe mit UND, deshalb je Stadt\n// mehrere schmale Abfragen statt einer breiten.\n// Kein Limit bei dieser Quelle - hier darf grosszuegig gesucht werden.\nvar begriffe = ['Werkstudent', 'Praktikum', 'Teilzeit', 'Minijob'];\n\nvar staedte = [];\ntry {\n  var sys = $('Kunden aus WordPress holen').first().json.system || {};\n  staedte = Array.isArray(sys.staedte) && sys.staedte.length ? sys.staedte : [];\n} catch (e) { staedte = []; }\n\nif (!staedte.length) {\n  staedte = [{ stadt: 'Leipzig', umkreis: 50 }, { stadt: 'Berlin', umkreis: 30 }];\n}\n\nvar out = [];\nfor (var i = 0; i < staedte.length; i++) {\n  for (var b = 0; b < begriffe.length; b++) {\n    out.push({ json: {\n      stadt:      staedte[i].stadt,\n      umkreis:    String(staedte[i].umkreis || 30),\n      ba_begriff: begriffe[b]\n    }});\n  }\n}\nreturn out;"
+      },
+      "id": "3d2c5d73-9686-4c99-8fb8-3e52b56cd57a",
+      "name": "BA-Suchliste bauen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2304,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Beide Quellen zusammenfuehren und entdoppeln.\n// Ergebnis ist EIN Pool, der anschliessend auf alle Kunden verteilt wird.\nvar adzuna = [];\nvar ba = [];\ntry { adzuna = $('Adzuna aufbereiten').all().map(function (i) { return i.json; }); } catch (e) { adzuna = []; }\ntry { ba = $('Normalize Arbeitsagentur').all().map(function (i) { return i.json; }); } catch (e) { ba = []; }\n\nfunction sauber(u) {\n  if (!u) return '';\n  return String(u).split('?')[0].split('#')[0].trim().toLowerCase();\n}\nfunction text(t) {\n  return String(t || '').toLowerCase().replace(/[^a-z0-9]/g, '');\n}\n\nvar gesehenUrl = {};\nvar gesehenKey = {};\nvar pool = [];\n\n// Arbeitsagentur zuerst: sie liefert vollstaendige Beschreibungen und\n// ist damit fuer Bewertung und Anschreiben die bessere Quelle.\nba.concat(adzuna).forEach(function (job) {\n  if (!job || !job.title) return;\n  var url = sauber(job.url);\n  var key = text(job.title) + '___' + text(job.company);\n  if (!url || gesehenUrl[url] || gesehenKey[key]) return;\n  gesehenUrl[url] = true;\n  gesehenKey[key] = true;\n  pool.push(job);\n});\n\n// Der Pool haengt an EINEM Element, damit die Kundenschleife ihn\n// vollstaendig lesen kann, statt ihn in Einzelteile zu zerlegen.\nreturn [{ json: { pool: pool, anzahl: pool.length, adzuna: adzuna.length, ba: ba.length } }];"
+      },
+      "id": "5b10a89a-1fcc-49c6-9cae-df8424f9f752",
+      "name": "Job-Pool bilden",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1136,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Der Job-Pool steht. Jetzt die Kundenliste wieder hervorholen,\n// damit die Schleife pro Kunde laufen kann.\nvar kunden = [];\ntry { kunden = $('Kunden aus WordPress holen').first().json.kunden || []; } catch (e) { kunden = []; }\n\nvar bereit = kunden.filter(function (k) { return k && k.bereit === true; });\n\nreturn bereit.map(function (k) { return { json: k }; });"
+      },
+      "id": "affe9993-6247-4b20-b2f6-e0ce98ae957f",
+      "name": "Kunden nachladen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -848,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "f7c8a1e2-9b3d-4e5f-8a6b-1c2d3e4f5a6b",
+      "name": "Auf beide Quellen warten",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -1312,
+        288
+      ]
+    }
+  ],
+  "pinData": {
+    "Download Master CV": [
+      {
+        "json": {
+          "timestamp": "2026-08-17T14:48:19.720-04:00",
+          "Readable date": "August 17th 2026, 2:48:19 pm",
+          "Readable time": "2:48:19 pm",
+          "Day of week": "Monday",
+          "Year": "2026",
+          "Month": "August",
+          "Day of month": "17",
+          "Hour": "14",
+          "Minute": "48",
+          "Second": "19",
+          "Timezone": "America/New_York (UTC-04:00)"
+        },
+        "binary": {
+          "data": {
+            "mimeType": "application/pdf",
+            "fileType": "pdf",
+            "fileExtension": "pdf",
+            "data": "filesystem-v2",
+            "fileName": "Kopie von Lebenslauf_Mohammed_Othman (1).pdf",
+            "id": "filesystem-v2:workflows/LDBU1Zg0WjCOoI71/executions/9/binary_data/bcaf9519-4e25-49c5-b6c7-e7b4698c3bc1",
+            "fileSize": "400 kB",
+            "bytes": 399696
+          }
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Select Freshest & Best Match": {
+      "main": [
+        [
+          {
+            "node": "Has Fresh Job?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Fresh Job?": {
+      "main": [
+        [
+          {
+            "node": "Bewertung vorbereiten",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Kunde fuer Kunde",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Application Options": {
+      "main": [
+        [
+          {
+            "node": "Assemble Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assemble Record": {
+      "main": [
+        [
+          {
+            "node": "Send To WordPress Portal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Email From Description": {
+      "main": [
+        [
+          {
+            "node": "Email Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Found?": {
+      "main": [
+        [
+          {
+            "node": "Detect Application Options",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch Job Page For Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Email From Full Page": {
+      "main": [
+        [
+          {
+            "node": "Detect Application Options",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Job Page For Email": {
+      "main": [
+        [
+          {
+            "node": "Extract Email From Full Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kunde fuer Kunde": {
+      "main": [
+        null,
+        [
+          {
+            "node": "Kunden-CV laden",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send To WordPress Portal": {
+      "main": [
+        [
+          {
+            "node": "Kunde fuer Kunde",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Score": {
+      "main": [
+        [
+          {
+            "node": "Stelle geeignet?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stelle geeignet?": {
+      "main": [
+        [
+          {
+            "node": "Compute Folder Name",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Kunde fuer Kunde",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq - Bewertung": {
+      "main": [
+        [
+          {
+            "node": "Merge Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq - Anforderungen": {
+      "main": [
+        [
+          {
+            "node": "Parse Anforderungen Match",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq - Anschreiben": {
+      "main": [
+        [
+          {
+            "node": "Parse Cover Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kunden-CV laden": {
+      "main": [
+        [
+          {
+            "node": "Extract Master CV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Master CV": {
+      "main": [
+        [
+          {
+            "node": "CV-Daten auslesen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CV-Daten auslesen": {
+      "main": [
+        [
+          {
+            "node": "CV-Daten aufbereiten",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Anforderungen Match": {
+      "main": [
+        [
+          {
+            "node": "Groq - Anschreiben",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Cover Fields": {
+      "main": [
+        [
+          {
+            "node": "Extract Email From Description",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Folder Name": {
+      "main": [
+        [
+          {
+            "node": "Groq - Anforderungen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Arbeitsagentur Jobs": {
+      "main": [
+        [
+          {
+            "node": "Extract BA Refnrs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract BA Refnrs": {
+      "main": [
+        [
+          {
+            "node": "Arbeitsagentur Job Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Arbeitsagentur Job Details": {
+      "main": [
+        [
+          {
+            "node": "Normalize Arbeitsagentur",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bewertung vorbereiten": {
+      "main": [
+        [
+          {
+            "node": "Groq - Bewertung",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CV-Daten aufbereiten": {
+      "main": [
+        [
+          {
+            "node": "CV lesbar?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CV lesbar?": {
+      "main": [
+        [
+          {
+            "node": "Select Freshest & Best Match",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Schluesselproblem melden",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schluesselproblem melden": {
+      "main": [
+        [
+          {
+            "node": "Kunde fuer Kunde",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kunden aus WordPress holen": {
+      "main": [
+        [
+          {
+            "node": "Suchliste bauen",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "BA-Suchliste bauen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Suchliste bauen": {
+      "main": [
+        [
+          {
+            "node": "Adzuna gemeinsam",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Adzuna gemeinsam": {
+      "main": [
+        [
+          {
+            "node": "Adzuna aufbereiten",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BA-Suchliste bauen": {
+      "main": [
+        [
+          {
+            "node": "Arbeitsagentur Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Taeglich 8, 11, 14, 18 Uhr": {
+      "main": [
+        [
+          {
+            "node": "Kunden aus WordPress holen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job-Pool bilden": {
+      "main": [
+        [
+          {
+            "node": "Kunden nachladen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kunden nachladen": {
+      "main": [
+        [
+          {
+            "node": "Kunde fuer Kunde",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Adzuna aufbereiten": {
+      "main": [
+        [
+          {
+            "node": "Auf beide Quellen warten",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Arbeitsagentur": {
+      "main": [
+        [
+          {
+            "node": "Auf beide Quellen warten",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Auf beide Quellen warten": {
+      "main": [
+        [
+          {
+            "node": "Job-Pool bilden",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "f8fd70e3-ffa6-4f6f-9e6d-d73f4e46e136",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "0dcf7b73dc8b5f8a2f263bde4fa976944e6bea1ca55a1932d951f4e519c49e9f"
+  },
+  "nodeGroups": [],
+  "id": "LDBU1Zg0WjCOoI71",
+  "tags": []
+}
