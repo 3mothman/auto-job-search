@@ -2,6 +2,8 @@
 
 WordPress-Plugin, das eine automatisierte Jobsuche als Self-Service-Portal fuer Kunden anbietet. Version 5.0.5.
 
+Vollständige Softwarearchitektur (Komponenten, Datenflüsse, Datenmodell, Sicherheit): siehe [ARCHITECTURE.md](ARCHITECTURE.md).
+
 ## Was es macht
 
 Kunden registrieren sich auf der WordPress-Seite, laden ihren Lebenslauf hoch und hinterlegen ihre Praeferenzen (Standort, Arbeitszeitmodell, Branche). Das Plugin uebergibt diese Daten per Webhook an eine [n8n](https://n8n.io/)-Automatisierung, die im Hintergrund Jobboersen durchsucht, Treffer gegen den Lebenslauf bewertet (Score + Begruendung) und Bewerbungsunterlagen erstellt. Die Ergebnisse laufen ueber die WordPress-REST-API zurueck ins Portal und werden dem Kunden in einem Dashboard angezeigt.
