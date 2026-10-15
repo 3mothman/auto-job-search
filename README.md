@@ -1,61 +1,61 @@
 # Job Automation Portal
 
-WordPress-Plugin, das eine automatisierte Jobsuche als Self-Service-Portal fuer Kunden anbietet. Version 5.0.5.
+A WordPress plugin that provides customers with a self-service portal for automated job searches. Version 5.0.5.
 
-Vollständige Softwarearchitektur (Komponenten, Datenflüsse, Datenmodell, Sicherheit): siehe [ARCHITECTURE.md](ARCHITECTURE.md).
+For the full software architecture (components, data flows, data model, and security), see [ARCHITECTURE.md](ARCHITECTURE.md).
 
-## Was es macht
+## What it does
 
-Kunden registrieren sich auf der WordPress-Seite, laden ihren Lebenslauf hoch und hinterlegen ihre Praeferenzen (Standort, Arbeitszeitmodell, Branche). Das Plugin uebergibt diese Daten per Webhook an eine [n8n](https://n8n.io/)-Automatisierung, die im Hintergrund Jobboersen durchsucht, Treffer gegen den Lebenslauf bewertet (Score + Begruendung) und Bewerbungsunterlagen erstellt. Die Ergebnisse laufen ueber die WordPress-REST-API zurueck ins Portal und werden dem Kunden in einem Dashboard angezeigt.
+Customers register on the WordPress site, upload their CV, and set their preferences (location, work schedule, and industry). The plugin sends this data via webhook to an [n8n](https://n8n.io/) automation, which searches job boards in the background, evaluates matches against the CV (score and explanation), and prepares application documents. Results are sent back to the portal through the WordPress REST API and displayed to the customer in a dashboard.
 
-## Funktionsumfang
+## Features
 
-- **Registrierung & Login** (`[jap_register]`, `[jap_login]`): Kontoerstellung inkl. CV-Upload und Suchpraeferenzen.
-- **Kundeneinstellungen** (`[jap_einstellungen]`): CV, Praeferenzen und persoenliche API-Keys (z. B. Groq) verwalten. Die Keys werden verschluesselt gespeichert, abgeleitet aus den WordPress-Salts (nie im Klartext in der Datenbank).
-- **Dashboard** (`[jap_dashboard]`): zeigt die gefundenen Job-Treffer inklusive Score, Begruendung und generierten Bewerbungsunterlagen.
-- **n8n-Anbindung**: Webhook-URL fuer neue Anmeldungen (Admin-Einstellungsseite unter *Job Automation Portal*), REST-Endpunkte unter `jap/v1/*`, ueber die n8n Kundenlisten abruft und Suchergebnisse zurueckschreibt.
-- **PDF-Erzeugung**: Lebenslauf und Anschreiben werden direkt auf dem eigenen Server erzeugt (eigene FPDF-Bibliothek unter `lib/fpdf`) - ohne Google-Konto oder externe Dienste.
-- **Weitere Seiten**: Kontaktformular, Impressum/Datenschutz (Vorlagen), Ueber-uns- und AGB-Shortcodes, Admin-Einstellungsseite fuer Landingpage-Texte.
+- **Registration & login** (`[jap_register]`, `[jap_login]`): Create an account, upload a CV, and set search preferences.
+- **Customer settings** (`[jap_einstellungen]`): Manage the CV, preferences, and personal API keys (such as Groq). Keys are encrypted using the WordPress salts and are never stored in plain text in the database.
+- **Dashboard** (`[jap_dashboard]`): Shows matching jobs with their scores, explanations, and generated application documents.
+- **n8n integration**: Configure a webhook URL for new registrations (on the *Job Automation Portal* admin settings page). The plugin provides REST endpoints under `jap/v1/*` for n8n to retrieve customer lists and send search results back.
+- **PDF generation**: CVs and cover letters are generated directly on your own server using the included FPDF library under `lib/fpdf`—without a Google account or external services.
+- **Additional pages**: Contact form, imprint and privacy policy templates, About Us and Terms and Conditions shortcodes, and an admin settings page for landing page text.
 
-## Ziel
+## Goal
 
-Kunden sollen ihre Jobsuche vollstaendig automatisieren koennen: einmal CV hochladen und Praeferenzen setzen, danach laeuft die Suche, Bewertung und Dokumentenerstellung ohne weiteres Zutun im Hintergrund - Ergebnisse landen gesammelt im eigenen Dashboard.
+Customers should be able to automate their job search completely: upload a CV and set preferences once, then let the background process search, evaluate jobs, and prepare documents without further input. Results are collected in their dashboard.
 
-## Projektstruktur
+## Project structure
 
 ```
-job-automation-portal.php   Haupt-Plugin-Datei: Post-Type, Shortcodes, REST-Endpunkte, n8n-Webhook
+job-automation-portal.php   Main plugin file: post type, shortcodes, REST endpoints, n8n webhook
 includes/
-  startseite.php            Landingpage-Shortcode
-  einstellungen.php         Kundeneinstellungen: CV, Praeferenzen, API-Keys
-  kataloge.php               Feste Auswahllisten (Studienbereiche, Staedte)
-  kontakt.php                Kontaktformular
-  rechtstexte.php            Datenschutz- und Impressum-Shortcodes
-  seiten.php                  Ueber-uns- und AGB-Shortcodes
-  admin.php                   Admin-Einstellungsseite fuer Landingpage-Texte
-  verschluesselung.php        Verschluesselung der Kunden-API-Keys
-  pdf.php, pdf-document.php   PDF-Erzeugung fuer Lebenslauf/Anschreiben
-lib/fpdf/                    FPDF-Bibliothek zur PDF-Erzeugung
-assets/                       CSS und Bilder
-n8n/apify.json                n8n-Workflow: die eigentliche Suche, Bewertung und Dokumentenerstellung
+  startseite.php            Landing page shortcode
+  einstellungen.php         Customer settings: CV, preferences, API keys
+  kataloge.php               Fixed selection lists (fields of study, cities)
+  kontakt.php                Contact form
+  rechtstexte.php            Privacy policy and imprint shortcodes
+  seiten.php                  About Us and Terms and Conditions shortcodes
+  admin.php                   Admin settings page for landing page text
+  verschluesselung.php        Encryption of customer API keys
+  pdf.php, pdf-document.php   PDF generation for CVs and cover letters
+lib/fpdf/                    FPDF library for PDF generation
+assets/                       CSS and images
+n8n/apify.json                n8n workflow: the actual search, evaluation, and document generation
 ```
 
-## n8n-Workflow (`n8n/apify.json`)
+## n8n workflow (`n8n/apify.json`)
 
-Das ist die Automatisierung, die im Hintergrund laeuft und mit dem Plugin ueber dessen REST-API (`jap/v1/*`) und Webhook kommuniziert. Import in n8n über *Import from File*.
+This is the background automation that communicates with the plugin through its REST API (`jap/v1/*`) and webhook. Import it into n8n using *Import from File*.
 
-Ablauf:
+Workflow:
 
-1. **Zeitplan**: laeuft taeglich um 8, 11, 14 und 18 Uhr.
-2. **Kunden laden**: holt aktive Kunden inkl. Praeferenzen und CV-Link ueber `jap/v1/kunden` vom Portal (Basic-Auth-Credential `WP Portal Auth`).
-3. **Job-Pool bilden**: sucht einmal gemeinsam fuer alle Kunden bei zwei Quellen - der Arbeitsagentur-Jobboerse-API und Adzuna - und fasst die Treffer zu einem gemeinsamen Pool zusammen (spart API-Aufrufe statt pro Kunde einzeln zu suchen).
-4. **Auswahl pro Kunde** (`Select Freshest & Best Match`): filtert reine Textstatistik (TF-IDF/Cosine-Similarity, keine KI, kostet keine Tokens) - sortiert nach Aktualitaet und Relevanz zu Keywords, Standort, Remote-Praeferenz und CV-Inhalt; schliesst Stellen mit harten Anforderungen (z. B. "mehrjaehrige Berufserfahrung", "Senior") automatisch aus.
-5. **Bewertung** (`Groq - Bewertung`, `Groq - Anforderungen`, `Groq - Anschreiben`): fuer die uebrig gebliebenen Top-Treffer bewertet ein LLM (ueber den persoenlichen Groq-API-Key des Kunden) die Passung (Score + Begruendung), extrahiert Anforderungen und erstellt Anschreiben-Text.
-6. **Dokumente & Rueckmeldung**: baut den Datensatz zusammen und schickt ihn per `Send To WordPress Portal` an `jap/v1/bewerbung`, wo das Plugin daraus die PDF-Bewerbungsunterlagen erzeugt und im Kunden-Dashboard anzeigt.
-7. **Fehlerfall**: fehlt oder ist ein Kunden-API-Key ungueltig, meldet der Workflow das ueber `jap/v1/schluessel-problem` zurueck ans Portal, statt stumm zu scheitern.
+1. **Schedule**: Runs daily at 8:00, 11:00, 14:00, and 18:00.
+2. **Load customers**: Retrieves active customers, their preferences, and CV links from `jap/v1/kunden` on the portal (Basic Auth credential `WP Portal Auth`).
+3. **Build a job pool**: Searches two sources once for all customers—the Federal Employment Agency job listings API and Adzuna—and combines the results into one pool. This saves API calls compared with searching separately for each customer.
+4. **Select jobs for each customer** (`Select Freshest & Best Match`): Uses text statistics only (TF-IDF/Cosine Similarity, no AI and no token costs) to sort jobs by recency and relevance to keywords, location, remote-work preference, and CV content. It automatically excludes jobs with strict requirements (such as “several years of professional experience” or “senior”).
+5. **Evaluate matches** (`Groq - Bewertung`, `Groq - Anforderungen`, `Groq - Anschreiben`): For the remaining top matches, an LLM uses each customer's personal Groq API key to score the fit, extract requirements, and draft cover letter text.
+6. **Create documents and return results**: Assembles the data and sends it through `Send To WordPress Portal` to `jap/v1/bewerbung`. The plugin creates the application PDFs and displays them in the customer's dashboard.
+7. **Handle errors**: If a customer API key is missing or invalid, the workflow reports it to the portal through `jap/v1/schluessel-problem` instead of failing silently.
 
-Vor dem Import muessen in n8n die Credentials `WP Portal Auth` (Basic-Auth fuers Portal) neu angelegt und die Zugangsdaten (Portal-URL, Adzuna-Keys etc.) auf die eigene Installation angepasst werden - im Export sind nur Credential-Referenzen (IDs/Namen) enthalten, keine Geheimnisse.
+Before importing, create the `WP Portal Auth` credential in n8n (Basic Auth for the portal) and update the portal URL, Adzuna keys, and other access details for your installation. The export contains credential references (IDs/names), not secrets.
 
-## Autor
+## Author
 
 Mohammed Othman
