@@ -52,6 +52,7 @@ sequenceDiagram
     participant REST as WordPress REST API
     participant Jobs as Federal Employment Agency + Adzuna
     participant Groq
+    participant Hook as Separate n8n webhook workflow
 
     Customer->>WP: Register, upload CV, save preferences
     WP->>DB: Store account and profile
@@ -70,8 +71,11 @@ sequenceDiagram
         loop Each customer returned by /kunden
             N8N->>Media: Download CV by URL
             Media-->>N8N: CV file
-            N8N->>Groq: Extract CV details and enrich selected matches
-            Groq-->>N8N: CV fields, match score, requirements, draft text
+            N8N->>Groq: Parse up to 7,000 characters of extracted CV text
+            Groq-->>N8N: Structured CV fields
+            N8N->>N8N: Rank locally and select up to six matches
+            N8N->>Groq: Score matches, summarize requirements, draft cover letter
+            Groq-->>N8N: Match details and application draft
             N8N->>REST: POST /bewerbung
             REST->>DB: Check duplicate and store match
         end
@@ -89,20 +93,21 @@ flowchart TD
     S["Schedule trigger<br/>08:00 · 11:00 · 14:00 · 18:00"]
     C["GET /kunden<br/>up to 200 active customers"]
     P["Build shared job pool<br/>Federal Employment Agency + Adzuna"]
-    L["For each customer<br/>download CV and extract text"]
+    L["For each customer<br/>download CV and extract PDF text"]
+    X["Groq CV parsing<br/>up to 7,000 extracted characters"]
     R["Rank locally<br/>TF-IDF · cosine similarity · preferences"]
     F["Filter strict requirements<br/>select up to 6 matches"]
-    G["Groq enrichment<br/>score · requirements · cover-letter draft"]
+    G["Groq job enrichment<br/>score · requirements · cover-letter draft"]
     W["POST /bewerbung"]
     D["WordPress duplicate check<br/>store match · generate PDFs"]
     V["Customer dashboard"]
     E["Key problem<br/>POST /schluessel-problem"]
 
-    S --> C --> P --> L --> R --> F --> G --> W --> D --> V
+    S --> C --> P --> L --> X --> R --> F --> G --> W --> D --> V
     L -. "unreadable CV or rejected key" .-> E
 ```
 
-The shared pool is searched once for the customer batch rather than once per customer. Text-based ranking and filtering happen in n8n before AI calls; only up to six selected matches per customer are sent for Groq evaluation. The workflow prepares documents but does not submit job applications.
+The shared pool is searched once for the customer batch rather than once per customer. Groq first structures the extracted CV text. After that step, matching and filtering run locally in n8n; only up to six selected job matches per customer are sent for job-specific Groq evaluation. The workflow prepares documents but does not submit job applications.
 
 ## Components
 
