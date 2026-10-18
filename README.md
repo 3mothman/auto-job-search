@@ -17,7 +17,7 @@ The system prepares search results and application documents. It does **not** su
 ```mermaid
 flowchart LR
     Customer["Customer<br/>browser"]
-    Portal["WordPress plugin<br/>registration · settings · dashboard"]
+    Portal["WordPress plugin<br/>registration · settings · dashboard · PDF generation"]
     DB["WordPress database<br/>user meta · job matches"]
     REST["WordPress REST API<br/>jap/v1"]
     N8N["Scheduled n8n workflow<br/>n8n/apify.json"]
@@ -34,9 +34,9 @@ flowchart LR
     N8N <-->|"GET /kunden<br/>POST /bewerbung<br/>POST /schluessel-problem"| REST
     REST <--> DB
     N8N -->|"Download CV by URL"| CV
-    N8N --> BA
-    N8N --> ADZ
-    N8N --> Groq
+    N8N <-->|"Search requests · job listings"| BA
+    N8N <-->|"Search requests · job listings"| ADZ
+    N8N <-->|"CV/profile data · AI responses"| Groq
     Portal -.->|"Optional signup event"| Hook
 ```
 
