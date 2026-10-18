@@ -23,7 +23,7 @@ function jap_felder() {
 		'hero_text' => array(
 			'label' => 'Intro paragraph',
 			'typ'   => 'textarea',
-			'std'   => 'Built by a student who got tired of refreshing job boards between lectures. Every two hours we search for working student, part-time and internship roles that fit your field and your city, and write the CV and cover letter for each one.',
+			'std'   => 'Built by a student who got tired of refreshing job boards between lectures. Four times a day, we search for working student, part-time and internship roles that fit your field and your city, and write the CV and cover letter for each one.',
 		),
 		'shot_text' => array(
 			'label' => 'Caption under the dashboard screenshot',
