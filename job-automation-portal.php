@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Job Automation Portal
- * Description: Kundenregistrierung mit CV-Upload, Praeferenzen, Webhook-Anbindung an n8n und Dashboard mit den gefundenen Job-Ergebnissen.
+ * Description: Customer registration with CV upload, search preferences, n8n integration, and a dashboard of matching jobs.
  * Version: 5.0.5
  * Author: Mohammed Othman
  * Text Domain: jap
@@ -58,7 +58,7 @@ add_action( 'init', function () {
 			'type'         => $type,
 			'single'       => true,
 			'show_in_rest' => true,
-			'auth_callback'=> function () { return current_user_can( 'edit_posts' ); },
+			'auth_callback'=> function () { return current_user_can( 'manage_options' ); },
 		) );
 	}
 } );
@@ -719,15 +719,15 @@ add_shortcode( 'jap_dashboard', function () {
 } );
 
 /* -------------------------------------------------------------------------
- * 7. REST-API-Endpunkt: n8n schreibt hier Ergebnisse zurueck
- *    Aufruf per Application Password (Basic Auth) eines Admin-Kontos.
+ * 7. REST API endpoint: n8n submits matching jobs here
+ *    Access requires an administrator Application Password (Basic Auth).
  * ---------------------------------------------------------------------- */
 add_action( 'rest_api_init', function () {
 	register_rest_route( 'jap/v1', '/bewerbung', array(
 		'methods'             => 'POST',
 		'callback'            => 'jap_rest_create_bewerbung',
 		'permission_callback' => function () {
-			return current_user_can( 'edit_posts' );
+			return current_user_can( 'manage_options' );
 		},
 	) );
 } );
@@ -745,8 +745,8 @@ function jap_rest_create_bewerbung( WP_REST_Request $request ) {
 	}
 
 	// Doppelte Eintraege verhindern.
-	// Der Workflow laeuft alle zwei Stunden und sucht in einem Zeitfenster von
-	// mehreren Tagen - dieselbe Stelle taucht also immer wieder auf.
+	// The workflow runs four times a day and searches across multiple days,
+	// so the same job can appear in several runs.
 	// Ohne diese Pruefung wuerde sie dem Kunden dutzendfach angezeigt.
 	$job_url = isset( $data['job_url'] ) ? esc_url_raw( $data['job_url'] ) : '';
 	if ( $job_url ) {
@@ -877,17 +877,17 @@ function jap_send_new_job_email( $user_id, $post_id ) {
 }
 
 /* -------------------------------------------------------------------------
- * 9. REST-Endpunkt: Kundenliste fuer n8n
- *    n8n holt sich hier alle aktiven Kunden mit ihren Suchpraeferenzen,
- *    um pro Kunde eine eigene Suche zu fahren.
- *    GET /wp-json/jap/v1/kunden   (Basic Auth mit Application Password)
+ * 9. REST endpoint: active customer list for n8n
+ *    The workflow uses this list to build a shared job pool and match jobs
+ *    against each customer's preferences. Access is restricted to admins.
+ *    GET /wp-json/jap/v1/kunden (Basic Auth with an Application Password)
  * ---------------------------------------------------------------------- */
 add_action( 'rest_api_init', function () {
 	register_rest_route( 'jap/v1', '/kunden', array(
 		'methods'             => 'GET',
 		'callback'            => 'jap_rest_list_kunden',
 		'permission_callback' => function () {
-			return current_user_can( 'edit_posts' );
+			return current_user_can( 'manage_options' );
 		},
 	) );
 } );
@@ -1096,9 +1096,9 @@ function jap_erzeuge_dokumente( $user_id, $post_id, $data ) {
 }
 
 /* -------------------------------------------------------------------------
- * 11. Schluesselprobleme melden
- *     n8n ruft diesen Endpunkt auf, wenn der Groq- oder Adzuna-Schluessel
- *     eines Kunden abgelehnt wurde. Der Kunde bekommt dann eine E-Mail und
+ * 11. Report credential problems
+ *     n8n calls this endpoint when a customer's Groq key is rejected.
+ *     The customer then receives an email and
  *     sieht einen Hinweis in seinen Einstellungen.
  *     POST /wp-json/jap/v1/schluessel-problem
  * ---------------------------------------------------------------------- */
@@ -1107,7 +1107,7 @@ add_action( 'rest_api_init', function () {
 		'methods'             => 'POST',
 		'callback'            => 'jap_rest_schluessel_problem',
 		'permission_callback' => function () {
-			return current_user_can( 'edit_posts' );
+			return current_user_can( 'manage_options' );
 		},
 	) );
 } );
