@@ -2,126 +2,182 @@
 
 Version 5.0.5 · Author: Mohammed Othman
 
-## Overview
+## Purpose and scope
 
-The system consists of two independently running parts that communicate exclusively through the plugin's REST API:
+The project has two main runtime components:
 
-- **WordPress plugin** (`job-automation-portal.php` + `includes/`): Customer portal and data storage. Registration, CV upload, preferences, dashboard, and PDF generation.
-- **n8n workflow** (`n8n/apify.json`): Standalone automation that fetches work itself (pull) instead of having work sent to it (push).
+- **WordPress plugin**: Customer portal, profile and CV storage, REST API, match records, and PDF generation.
+- **Scheduled n8n workflow** (`n8n/apify.json`): Shared job search, per-customer matching, Groq processing, and delivery of results to WordPress.
 
-This separation means the portal keeps working when n8n is unavailable, and the workflow can be tested and changed independently of the plugin code.
+The scheduled workflow pulls customer data from WordPress through the REST API and posts matches back through that API. It also downloads CV files from their WordPress URLs. An optional registration webhook can notify a separate n8n workflow, but that separate workflow is not included in this repository export.
 
-## System architecture
+## System context
 
 ```mermaid
 flowchart LR
-    Customer["Customer<br/>(browser)"]
-    Forms["Forms & dashboard<br/>(shortcodes, includes/*.php)"]
-    DB["WP database<br/>Users+Meta · CPT jap_bewerbung"]
-    REST["REST API jap/v1<br/>Basic Auth (application password)"]
-    N8N["n8n automation<br/>apify.json · 4 times a day"]
+    Customer["Customer<br/>browser"]
+    Portal["WordPress plugin<br/>registration · settings · dashboard"]
+    DB["WordPress database<br/>user meta · jap_bewerbung posts"]
+    REST["WordPress REST API<br/>jap/v1"]
+    Media["WordPress media<br/>uploaded CV files"]
+    N8N["Scheduled n8n workflow<br/>n8n/apify.json"]
     BA["Federal Employment Agency API"]
     ADZ["Adzuna API"]
-    GROQ["Groq API (LLM)"]
-    Webhook["Separate webhook workflow<br/>on new registration<br/>(not in n8n/apify.json)"]
+    GROQ["Groq API"]
+    Hook["Separate registration<br/>webhook workflow<br/>(optional)"]
 
-    Customer <--> |"Forms / dashboard"| Forms
-    Forms <--> |"CV link, preferences,<br/>encrypted API keys"| DB
-    DB <--> |"active customers ·<br/>new matches"| REST
-    REST <--> |"GET /kunden<br/>POST /bewerbung<br/>POST /schluessel-problem"| N8N
-    N8N --> |"GET jobsuche-service"| BA
-    N8N --> |"GET /jobs/de/search"| ADZ
-    N8N --> |"POST chat/completions"| GROQ
-    Forms -.-> |optional| Webhook
-
-    style REST fill:#e8edff,stroke:#2454ff
-    style N8N fill:#eceef2
-    style Webhook fill:#fbe9d5,stroke:#b45309,stroke-dasharray: 4 3
+    Customer <-->|"Register · preferences · results"| Portal
+    Portal <--> REST
+    Portal <--> DB
+    Portal -->|"Store uploaded CV"| Media
+    N8N <-->|"GET /kunden<br/>POST /bewerbung<br/>POST /schluessel-problem"| REST
+    N8N <-->|"GET CV by URL"| Media
+    N8N <-->|"Search requests · job listings"| BA
+    N8N <-->|"Search requests · job listings"| ADZ
+    N8N <-->|"CV/profile data · AI responses"| GROQ
+    Portal -.->|"Optional signup event"| Hook
 ```
 
-n8n fetches the work itself (pull) instead of having the portal push it (push). Registration can also trigger a separate webhook (plugin setting `jap_n8n_webhook_url`), but that webhook is not part of the workflow documented here. The `/kunden` endpoint returns at most 200 active customers per request; the workflow does not paginate beyond that limit. The schedule is 08:00, 11:00, 14:00, and 18:00 in the n8n instance timezone, which is not set in this workflow export.
+The portal and the scheduled workflow are independently deployed. A WordPress or n8n outage interrupts communication between them, but the n8n workflow is not required to render the portal. The separate registration webhook is an optional integration path and is not part of the scheduled job-search workflow.
 
-| Component | Responsibility | Files / endpoints |
-|---|---|---|
-| Forms & shortcodes | Registration, login, customer settings, dashboard, contact, legal text | `includes/startseite.php`, `einstellungen.php`, `kontakt.php`, `rechtstexte.php`, `seiten.php` |
-| WP database | User accounts and preferences as user meta; one custom post type `jap_bewerbung` per job match | `job-automation-portal.php` (register_post_type, register_post_meta) |
-| REST API `jap/v1` | The only interface for n8n: retrieve customers, write matches, report invalid keys | `/kunden` · `/bewerbung` · `/schluessel-problem` |
-| Encryption | Each customer's Groq API key is stored encrypted; the key is derived from WordPress salts. Shared Adzuna credentials are stored as site options | `includes/verschluesselung.php`, WordPress settings |
-| PDF generation | Server-side CVs and cover letters, without a Google account or external service | `includes/pdf.php`, `pdf-document.php`, `lib/fpdf` |
-| n8n automation | Scheduled search, evaluation, and document generation | `n8n/apify.json` |
-| External services | Job sources and LLM evaluation | Federal Employment Agency job listings API · shared Adzuna credentials · each customer's personal Groq key |
-
-## Automation pipeline
+## Runtime interaction
 
 ```mermaid
-flowchart LR
-    T1["1 · Schedule trigger<br/>8 · 11 · 14 · 18"]
-    T2["2 · Load customers<br/>GET /kunden"]
-    T3["3 · Build job pool<br/>Federal Employment Agency + Adzuna"]
-    T4["4 · Match for each customer<br/>TF-IDF, local · free"]
-    T5["5 · LLM enrichment<br/>Score · requirements · cover letter (Groq)"]
-    T6["6 · Send results back<br/>POST /bewerbung"]
-    T7["7 · PDF + email<br/>server-side (WP portal)"]
-    ERR["Error path: rejected customer Groq key<br/>POST /schluessel-problem → email to customer (max. once a day)"]
+sequenceDiagram
+    actor Customer
+    participant WP as WordPress plugin
+    participant DB as WordPress database
+    participant Media as WordPress media
+    participant N8N as Scheduled n8n workflow
+    participant REST as WordPress REST API
+    participant Jobs as Federal Employment Agency + Adzuna
+    participant Groq
+    participant Hook as Separate n8n webhook workflow
 
-    T1 --> T2 --> T3 --> T4 --> T5 --> T6 --> T7
-    T5 -.-> ERR
+    Customer->>WP: Register, upload CV, save preferences
+    WP->>DB: Store account and profile
+    WP->>Media: Store uploaded CV
 
-    style T5 fill:#e8edff,stroke:#2454ff
-    style T6 fill:#e8edff,stroke:#2454ff
-    style ERR fill:#fbe9d5,stroke:#b45309,stroke-dasharray: 4 3
+    opt Separate registration webhook is configured
+        WP-->>Hook: Send registration event
+    end
+
+    loop Four scheduled runs per day (n8n instance timezone)
+        N8N->>REST: GET /kunden
+        REST-->>N8N: Up to 200 active profiles and CV URLs
+        N8N->>Jobs: Search one shared job pool
+        Jobs-->>N8N: Job listings
+
+        loop Each customer returned by /kunden
+            N8N->>Media: Download CV by URL
+            Media-->>N8N: CV file
+            N8N->>Groq: Parse up to 7,000 characters of extracted CV text
+            Groq-->>N8N: Structured CV fields
+            alt CV data is usable and the customer's key is valid
+                N8N->>N8N: Rank locally and select up to six matches
+                N8N->>Groq: Score matches, summarize requirements, draft cover letter
+                Groq-->>N8N: Match details and application draft
+                N8N->>REST: POST /bewerbung
+                REST->>DB: Check duplicate and store match
+            else CV data is unusable or the key is rejected
+                N8N->>REST: POST /schluessel-problem
+            end
+        end
+    end
+
+    Customer->>WP: View matches and download generated PDFs
 ```
 
-Cost control happens before AI: step 4 filters and sorts using text statistics only (TF-IDF/Cosine Similarity), then sends just the six best matches per customer to Groq in step 5. This keeps LLM calls low while using each customer's personal Groq key instead of a shared account.
+The optional webhook participant is separate from the scheduled workflow; configure it only if the site has a corresponding n8n webhook workflow.
 
-**Why use a shared job pool?** Adzuna limits the number of requests per month. The workflow therefore searches once for all customers together (combining cities and search terms), then distributes the results to each customer instead of searching separately for every customer.
+## Scheduled automation pipeline
 
-**Why filter out strict requirements?** Jobs with phrases such as “several years of professional experience” or “senior” are excluded before evaluation. This saves Groq calls on matches that are unlikely to suit students.
+```mermaid
+flowchart TD
+    S["Schedule trigger<br/>08:00 · 11:00 · 14:00 · 18:00"]
+    C["GET /kunden<br/>up to 200 active customers"]
+    P["Build shared job pool<br/>Federal Employment Agency + Adzuna"]
+    L["For each customer<br/>download CV and extract PDF text"]
+    X["Groq CV parsing<br/>up to 7,000 extracted characters"]
+    R["Rank locally<br/>TF-IDF · cosine similarity · preferences"]
+    F["Filter strict requirements<br/>select up to 6 matches"]
+    G["Groq job enrichment<br/>score · requirements · cover-letter draft"]
+    W["POST /bewerbung"]
+    D["WordPress duplicate check<br/>store match · generate PDFs"]
+    V["Customer dashboard"]
+    E["Key problem<br/>POST /schluessel-problem"]
+
+    S --> C --> P --> L --> X --> R --> F --> G --> W --> D --> V
+    X -. "CV data unusable or Groq key rejected" .-> E
+```
+
+The shared pool is searched once for the customer batch rather than once per customer. Groq first structures the extracted CV text. After that step, matching and filtering run locally in n8n; only up to six selected job matches per customer are sent for job-specific Groq evaluation. The workflow prepares documents but does not submit job applications.
+
+## Components
+
+| Component | Responsibility | Implementation |
+|---|---|---|
+| Portal forms and shortcodes | Registration, login, customer settings, dashboard, contact and legal pages | `includes/startseite.php`, `einstellungen.php`, `kontakt.php`, `rechtstexte.php`, `seiten.php` |
+| WordPress storage | User accounts and profile fields in user meta; job matches as `jap_bewerbung` posts | `job-automation-portal.php` |
+| REST API | Customer retrieval, match creation, and key-problem reporting for n8n | `jap/v1/kunden`, `jap/v1/bewerbung`, `jap/v1/schluessel-problem` |
+| Key encryption | Encrypts each customer's Groq key using a key derived from WordPress salts | `includes/verschluesselung.php` |
+| PDF generation | Creates CV and cover-letter PDFs on the WordPress server | `includes/pdf.php`, `includes/pdf-document.php`, `lib/fpdf` |
+| Scheduled workflow | Builds a job pool, ranks matches, calls Groq, and writes results | `n8n/apify.json` |
+| External services | Job listings and language-model processing | Federal Employment Agency API, Adzuna, and Groq |
 
 ## Data model
 
-### Customer — user meta
+### Customer profile
+
+Customer fields are stored as WordPress user meta.
 
 | Field | Meaning |
 |---|---|
-| `jap_cv_url` | Link to the uploaded CV |
-| `jap_standort` / `_key` | City or cities selected for the search |
-| `jap_suchweite` | Search radius in km |
-| `jap_arbeitszeit` / `_labels` | Working student, internship, part-time, mini-job, full-time, thesis |
-| `jap_bereiche` / `jap_keywords` / `jap_branche` | Selected fields of study and the search terms derived from them |
-| `jap_status` | `aktiv`/`inaktiv` — determines whether n8n includes the customer in its next run |
-| `jap_key_problem*` | Note and timestamp when Groq or Adzuna rejects a customer's key |
+| `jap_cv_url` | URL of the uploaded CV |
+| `jap_standort` / `jap_standort_key` | Selected search location or locations |
+| `jap_suchweite` | Search radius in kilometres |
+| `jap_arbeitszeit` / `jap_arbeitszeit_labels` | Selected work types |
+| `jap_bereiche` / `jap_keywords` / `jap_branche` | Selected fields and derived search terms |
+| `jap_status` | `aktiv` or `inaktiv`; controls inclusion in a scheduled run |
+| `jap_key_problem*` | Key-problem note and notification timestamp |
 
-### Job match — custom post type `jap_bewerbung`
+### Job match
 
-| Field | Meaning |
-|---|---|
-| `jap_user_id` | The customer the match belongs to |
-| `jap_company` / `jap_location` / `jap_work_model` | Company, location, and work model |
-| `jap_score` / `jap_reason` | Groq evaluation (0–100) and explanation |
-| `jap_cv_link` / `jap_cover_link` | Generated PDF documents for this match |
-| `jap_job_url` / `jap_date_found` | Job listing source and time found |
-| `jap_bewerbungs_email` / `jap_betreff` / `jap_brieftext` | Detected application email address and generated cover letter text |
+Each match is stored as a custom post of type `jap_bewerbung`, with post meta for:
 
-Before saving, a match is checked for duplicates using `jap_user_id` + `jap_job_url`. The workflow searches across a multi-day time window; without this check it could create the same job again on every run.
+- Customer ID, company, location, and work model.
+- Groq score and explanation.
+- Source job URL and discovery date.
+- Generated CV and cover-letter PDF links.
+- Detected application email, subject, and cover-letter text.
 
-## Security
+Before creating a match, the plugin checks the customer ID and job URL to avoid storing the same listing repeatedly.
 
-- Each customer's Groq key is stored encrypted in user meta, using a key derived from WordPress salts (`AUTH_KEY` and others). The shared Adzuna App ID and key are stored as WordPress site options, not as customer keys; restrict access to the WordPress admin and integration credentials.
-- The `jap/v1/*` integration endpoints require the `manage_options` capability and n8n authenticates with an administrator application password (Basic Auth). Keep that credential private.
-- Each customer uses their own Groq and Adzuna keys. n8n does not hold shared LLM credit; if a key is misused, only that customer is affected.
-- A rejected customer Groq key triggers an explicit error message to the customer (at most once per day). Failures of the shared Adzuna credentials are not currently reported through this customer error route and must be handled by the operator.
-- n8n downloads the customer's CV and sends up to 7,000 characters of extracted CV text to Groq for parsing. It then sends relevant candidate and job details to Groq for match scoring and German application-document drafts. The privacy page describes the transfer to Groq; keep that disclosure aligned with the service configuration.
-- The privacy policy and imprint texts are templates according to the code comment, not legal advice; review them before launch.
+## Security and privacy boundaries
 
-## Operations & repository
+- The three `jap/v1/*` integration endpoints require the WordPress `manage_options` capability. The n8n `WP Portal Auth` credential uses a WordPress administrator application password over Basic Auth; treat it as an administrator credential and keep it private.
+- Each customer's Groq API key is encrypted in user meta using WordPress salts. Protect the salts and backups.
+- Adzuna App ID and key are shared site-level credentials stored in WordPress options. They are used to build the shared job pool; they are not individual customer keys.
+- Groq calls use each customer's personal key. The workflow sends up to 7,000 characters of extracted CV text for CV parsing and sends relevant profile and job details for match evaluation and drafting.
+- The WordPress server stores uploaded CVs and generated PDFs. The n8n workflow downloads CVs by URL while processing them.
+- Review the site's privacy notice and service settings before using real customer data. The repository's imprint and privacy texts are templates, not legal advice.
+
+## Operations and known limits
+
+- **Schedule**: 08:00, 11:00, 14:00, and 18:00 in the n8n instance timezone. The exported workflow does not set that timezone.
+- **Customer batch**: `/kunden` returns up to 200 active customers per request. The workflow does not paginate beyond that limit.
+- **Candidate volume**: Local ranking selects up to six matches per customer for Groq processing.
+- **Shared job pool**: Job source queries are made for the batch; results are then ranked for each customer.
+- **Deployment URL**: The export contains the current WordPress URL in three HTTP Request nodes. Update all three when deploying to another site.
+- **Credentials**: Recreate the `WP Portal Auth` Basic Auth credential after importing the workflow. The export contains a credential reference, not the application password.
+
+## Repository map
 
 | Path | Contents |
 |---|---|
-| `job-automation-portal.php` | Main plugin file: post type, shortcodes, REST endpoints, webhook setting |
-| `includes/` | Forms, settings, legal text, encryption, PDF generation |
-| `lib/fpdf/` | PDF library (third-party code; license included) |
-| `assets/` | CSS and images for the portal |
-| `n8n/apify.json` | Exported n8n workflow — import using “Import from File” |
-
-To run the system, you need a WordPress installation with the plugin, an n8n instance with the workflow imported, an administrator application password for REST authentication, a shared Adzuna account, and a separate Groq key for each customer. Recreate the `WP Portal Auth` credential in n8n after importing; the export contains a reference only, not any secrets. The workflow export hard-codes the current Hostinger portal URL in its three WordPress HTTP nodes; update all three URLs when deploying to a different site.
+| `job-automation-portal.php` | Main plugin, custom post type, shortcodes, REST routes, and webhook setting |
+| `includes/` | Forms, settings, legal text, encryption, and PDF generation |
+| `lib/fpdf/` | Third-party PDF library and license |
+| `assets/` | Portal CSS and images |
+| `n8n/apify.json` | Exported scheduled n8n workflow |
+| `README.md` | Project overview and setup steps |
