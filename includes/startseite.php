@@ -48,7 +48,7 @@ add_shortcode( 'jap_startseite', function () {
 
 			<div class="jap-stats">
 				<div><strong>&euro;0</strong><span>now and later</span></div>
-				<div><strong>Every 2h</strong><span>we check for you</span></div>
+				<div><strong>4x daily</strong><span>we check for you</span></div>
 				<div><strong>2 files</strong><span>ready per role</span></div>
 				<div><strong>2 sources</strong><span>Adzuna &amp; Federal Agency</span></div>
 			</div>
