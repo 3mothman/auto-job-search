@@ -31,10 +31,10 @@ flowchart LR
     Portal <--> DB
     Portal -->|"Store uploaded CV"| Media
     N8N <-->|"GET /kunden<br/>POST /bewerbung<br/>POST /schluessel-problem"| REST
-    N8N -->|"Download CV by URL"| Media
-    N8N --> BA
-    N8N --> ADZ
-    N8N -->|"CV extraction · match evaluation · drafts"| GROQ
+    N8N <-->|"GET CV by URL"| Media
+    N8N <-->|"Search requests · job listings"| BA
+    N8N <-->|"Search requests · job listings"| ADZ
+    N8N <-->|"CV/profile data · AI responses"| GROQ
     Portal -.->|"Optional signup event"| Hook
 ```
 
