@@ -12,32 +12,26 @@ Customers create an account, upload a CV, and save search preferences such as lo
 
 The system prepares search results and application documents. It does **not** submit job applications automatically.
 
-## Architecture at a glance
+## System context (C4 Level 1)
+
+This context view shows the people, the portal, and the external services. The detailed implementation views are in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ```mermaid
 flowchart LR
-    Customer["Customer<br/>browser"]
-    Portal["WordPress plugin<br/>registration · settings · dashboard · PDF generation"]
-    DB["WordPress database<br/>user meta · job matches"]
-    REST["WordPress REST API<br/>jap/v1"]
-    N8N["Scheduled n8n workflow<br/>n8n/apify.json"]
-    CV["Uploaded CV files"]
-    BA["Federal Employment Agency"]
-    ADZ["Adzuna"]
-    Groq["Groq API"]
-    Hook["Separate registration<br/>webhook workflow<br/>(optional)"]
+    Customer["Person<br/>Customer"]
+    Admin["Person<br/>Portal administrator"]
+    Portal["Software system<br/>Job Automation Portal<br/>WordPress + n8n"]
+    BA["External system<br/>Federal Employment Agency"]
+    Adzuna["External system<br/>Adzuna"]
+    Groq["External system<br/>Groq"]
+    Hook["Optional separate<br/>registration workflow"]
 
-    Customer <-->|"Register · manage profile · view results"| Portal
-    Portal <--> REST
-    Portal <--> DB
-    Portal --> CV
-    N8N <-->|"GET /kunden<br/>POST /bewerbung<br/>POST /schluessel-problem"| REST
-    REST <--> DB
-    N8N -->|"Download CV by URL"| CV
-    N8N <-->|"Search requests · job listings"| BA
-    N8N <-->|"Search requests · job listings"| ADZ
-    N8N <-->|"CV/profile data · AI responses"| Groq
-    Portal -.->|"Optional signup event"| Hook
+    Customer -->|"Registers · saves preferences · views matches"| Portal
+    Admin -->|"Configures portal and workflow"| Portal
+    Portal <-->|"Searches for job listings"| BA
+    Portal <-->|"Searches for job listings"| Adzuna
+    Portal <-->|"CV parsing · match evaluation · drafts"| Groq
+    Portal -.->|"Optional signup notification"| Hook
 ```
 
 ## Main features
