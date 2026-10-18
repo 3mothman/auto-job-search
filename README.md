@@ -56,10 +56,11 @@ The exported workflow is `n8n/apify.json`. Import it into n8n using **Import fro
 1. **Schedule**: Runs at 08:00, 11:00, 14:00, and 18:00 in the n8n instance timezone.
 2. **Load customers**: Calls `jap/v1/kunden` with the n8n Basic Auth credential `WP Portal Auth`. The endpoint returns at most 200 active customers per request; the workflow does not paginate.
 3. **Build a shared job pool**: Searches the Federal Employment Agency and Adzuna, then combines the listings before matching them to individual customers.
-4. **Rank locally**: Uses text statistics, including TF-IDF and cosine similarity, plus location and preference checks. This step does not call an AI service. Strict requirements such as required years of experience or senior roles are filtered before AI evaluation.
-5. **Enrich the six best matches**: For each customer, Groq uses that customer's personal key to extract CV details, score matches, summarize requirements, and draft a German cover letter.
-6. **Return results**: Sends match data to `jap/v1/bewerbung`. WordPress checks for duplicates, stores the match, generates PDFs, and displays it on the dashboard.
-7. **Report key problems**: The workflow can report a rejected or unusable customer key through `jap/v1/schluessel-problem`.
+4. **Parse each CV**: n8n downloads the customer's CV and sends up to 7,000 characters of extracted text to Groq using the customer's personal key to create structured CV details.
+5. **Rank locally**: Uses text statistics, including TF-IDF and cosine similarity, plus location and preference checks. This matching step does not call an AI service. Strict requirements such as required years of experience or senior roles are filtered before job-specific AI evaluation.
+6. **Enrich up to six selected matches**: Groq uses the customer's personal key to score each selected match, summarize requirements, and draft a German cover letter.
+7. **Return results**: Sends match data to `jap/v1/bewerbung`. WordPress checks for duplicates, stores the match, generates PDFs, and displays it on the dashboard.
+8. **Report key problems**: The workflow can report a rejected or unusable customer key through `jap/v1/schluessel-problem`.
 
 ## Installation and configuration
 
