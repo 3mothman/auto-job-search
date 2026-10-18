@@ -46,7 +46,7 @@ n8n fetches the work itself (pull) instead of having the portal push it (push). 
 | Forms & shortcodes | Registration, login, customer settings, dashboard, contact, legal text | `includes/startseite.php`, `einstellungen.php`, `kontakt.php`, `rechtstexte.php`, `seiten.php` |
 | WP database | User accounts and preferences as user meta; one custom post type `jap_bewerbung` per job match | `job-automation-portal.php` (register_post_type, register_post_meta) |
 | REST API `jap/v1` | The only interface for n8n: retrieve customers, write matches, report invalid keys | `/kunden` · `/bewerbung` · `/schluessel-problem` |
-| Encryption | Customer API keys are never stored in plain text; the key is derived from WordPress salts | `includes/verschluesselung.php` |
+| Encryption | Each customer's Groq API key is stored encrypted; the key is derived from WordPress salts. Shared Adzuna credentials are stored as site options | `includes/verschluesselung.php`, WordPress settings |
 | PDF generation | Server-side CVs and cover letters, without a Google account or external service | `includes/pdf.php`, `pdf-document.php`, `lib/fpdf` |
 | n8n automation | Scheduled search, evaluation, and document generation | `n8n/apify.json` |
 | External services | Job sources and LLM evaluation | Federal Employment Agency job listings API · shared Adzuna credentials · each customer's personal Groq key |
