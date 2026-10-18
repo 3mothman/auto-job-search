@@ -11,107 +11,130 @@ The project has two main runtime components:
 
 The scheduled workflow pulls customer data from WordPress through the REST API and posts matches back through that API. It also downloads CV files from their WordPress URLs. An optional registration webhook can notify a separate n8n workflow, but that separate workflow is not included in this repository export.
 
-## System context
+## Context and scope
+
+The main software system is the Job Automation Portal. Customers use it to manage their CV and search preferences and to review job matches. The WordPress plugin and scheduled n8n workflow are the two main parts of the system. The optional registration webhook is a separate workflow and is not included in this repository export.
+
+### Context diagram (C4 Level 1: System Context)
+
+This is the system boundary view: who uses the portal and which external services it relies on.
 
 ```mermaid
 flowchart LR
-    Customer["Customer<br/>browser"]
-    Portal["WordPress plugin<br/>registration · settings · dashboard"]
-    DB["WordPress database<br/>user meta · jap_bewerbung posts"]
-    REST["WordPress REST API<br/>jap/v1"]
-    Media["WordPress media<br/>uploaded CV files"]
-    N8N["Scheduled n8n workflow<br/>n8n/apify.json"]
-    BA["Federal Employment Agency API"]
-    ADZ["Adzuna API"]
-    GROQ["Groq API"]
-    Hook["Separate registration<br/>webhook workflow<br/>(optional)"]
+    Customer["Person<br/>Customer"]
+    Admin["Person<br/>Portal administrator"]
+    Portal["Software system<br/>Job Automation Portal<br/>WordPress + n8n"]
+    BA["External system<br/>Federal Employment Agency"]
+    Adzuna["External system<br/>Adzuna"]
+    Groq["External system<br/>Groq"]
+    Hook["Optional external workflow<br/>n8n registration webhook"]
 
-    Customer <-->|"Register · preferences · results"| Portal
-    Portal <--> REST
-    Portal <--> DB
-    Portal -->|"Store uploaded CV"| Media
-    N8N <-->|"GET /kunden<br/>POST /bewerbung<br/>POST /schluessel-problem"| REST
-    N8N <-->|"GET CV by URL"| Media
-    N8N <-->|"Search requests · job listings"| BA
-    N8N <-->|"Search requests · job listings"| ADZ
-    N8N <-->|"CV/profile data · AI responses"| GROQ
-    Portal -.->|"Optional signup event"| Hook
+    Customer -->|"Registers · manages profile · views matches"| Portal
+    Admin -->|"Configures portal and workflow"| Portal
+    Portal <-->|"Job search requests and listings"| BA
+    Portal <-->|"Job search requests and listings"| Adzuna
+    Portal <-->|"CV parsing and match drafting"| Groq
+    Portal -.->|"Optional signup notification"| Hook
 ```
 
-The portal and the scheduled workflow are independently deployed. A WordPress or n8n outage interrupts communication between them, but the n8n workflow is not required to render the portal. The separate registration webhook is an optional integration path and is not part of the scheduled job-search workflow.
+### Container diagram (C4 Level 2: Containers)
 
-## Runtime interaction
+This view opens the portal system to show the main deployable parts and data stores.
 
 ```mermaid
-sequenceDiagram
-    actor Customer
-    participant WP as WordPress plugin
-    participant DB as WordPress database
-    participant Media as WordPress media
-    participant N8N as Scheduled n8n workflow
-    participant REST as WordPress REST API
-    participant Jobs as Federal Employment Agency + Adzuna
-    participant Groq
-    participant Hook as Separate n8n webhook workflow
+flowchart LR
+    Customer["Customer"]
+    Admin["Portal administrator"]
 
-    Customer->>WP: Register, upload CV, save preferences
-    WP->>DB: Store account and profile
-    WP->>Media: Store uploaded CV
-
-    opt Separate registration webhook is configured
-        WP-->>Hook: Send registration event
+    subgraph System["Job Automation Portal"]
+        WP["Container<br/>WordPress site + plugin<br/>Portal · REST API · PDFs"]
+        N8N["Container<br/>n8n workflow<br/>Scheduled search"]
+        DB[("Data store<br/>WordPress database")]
+        Media[("Data store<br/>WordPress media and files")]
     end
 
-    loop Four scheduled runs per day (n8n instance timezone)
-        N8N->>REST: GET /kunden
-        REST-->>N8N: Up to 200 active profiles and CV URLs
-        N8N->>Jobs: Search one shared job pool
-        Jobs-->>N8N: Job listings
+    BA["External system<br/>Federal Employment Agency"]
+    Adzuna["External system<br/>Adzuna"]
+    Groq["External system<br/>Groq"]
 
-        loop Each customer returned by /kunden
-            N8N->>Media: Download CV by URL
-            Media-->>N8N: CV file
-            N8N->>Groq: Parse up to 7,000 characters of extracted CV text
-            Groq-->>N8N: Structured CV fields
-            alt CV data is usable and the customer's key is valid
-                N8N->>N8N: Rank locally and select up to six matches
-                N8N->>Groq: Score matches, summarize requirements, draft cover letter
-                Groq-->>N8N: Match details and application draft
-                N8N->>REST: POST /bewerbung
-                REST->>DB: Check duplicate and store match
-            else CV data is unusable or the key is rejected
-                N8N->>REST: POST /schluessel-problem
-            end
-        end
-    end
-
-    Customer->>WP: View matches and download generated PDFs
+    Customer --> WP
+    Admin --> WP
+    Admin --> N8N
+    WP <--> DB
+    WP <--> Media
+    N8N <-->|"REST API jap/v1"| WP
+    N8N <-->|"CV URL"| Media
+    N8N <-->|"Job searches and listings"| BA
+    N8N <-->|"Job searches and listings"| Adzuna
+    N8N <-->|"CV parsing and match drafts"| Groq
 ```
 
-The optional webhook participant is separate from the scheduled workflow; configure it only if the site has a corresponding n8n webhook workflow.
+### Plugin component diagram (C4 Level 3: WordPress plugin)
 
-## Scheduled automation pipeline
+This view focuses on responsibilities inside the WordPress plugin. The n8n workflow is the external caller of the REST endpoints.
 
 ```mermaid
-flowchart TD
-    S["Schedule trigger<br/>08:00 · 11:00 · 14:00 · 18:00"]
-    C["GET /kunden<br/>up to 200 active customers"]
-    P["Build shared job pool<br/>Federal Employment Agency + Adzuna"]
-    L["For each customer<br/>download CV and extract PDF text"]
-    X["Groq CV parsing<br/>up to 7,000 extracted characters"]
-    R["Rank locally<br/>TF-IDF · cosine similarity · preferences"]
-    F["Filter strict requirements<br/>select up to 6 matches"]
-    G["Groq job enrichment<br/>score · requirements · cover-letter draft"]
-    W["POST /bewerbung"]
-    D["WordPress duplicate check<br/>store match · generate PDFs"]
-    V["Customer dashboard"]
-    E["Key problem<br/>POST /schluessel-problem"]
+flowchart LR
+    Customer["Customer"]
+    N8N["n8n workflow"]
 
-    S --> C --> P --> L --> X --> R --> F --> G --> W --> D --> V
-    X -. "CV data unusable or Groq key rejected" .-> E
+    subgraph Plugin["WordPress plugin"]
+        UI["Shortcode pages<br/>registration · settings · dashboard"]
+        REST["REST handlers<br/>/kunden · /bewerbung<br/>/schluessel-problem"]
+        Encryption["Customer-key encryption"]
+        PDF["PDF generator<br/>FPDF"]
+    end
+
+    DB[("WordPress database<br/>user meta · jap_bewerbung")]
+    Media[("WordPress media<br/>CVs · generated PDFs")]
+
+    Customer <--> UI
+    UI <--> DB
+    UI --> Encryption
+    Encryption --> DB
+    N8N <-->|"Basic Auth · manage_options"| REST
+    REST <--> DB
+    REST --> PDF
+    PDF --> Media
+    UI <--> Media
 ```
 
-The shared pool is searched once for the customer batch rather than once per customer. Groq first structures the extracted CV text. After that step, matching and filtering run locally in n8n; only up to six selected job matches per customer are sent for job-specific Groq evaluation. The workflow prepares documents but does not submit job applications.
+The WordPress REST routes require the `manage_options` capability. The n8n integration uses a WordPress administrator application password over Basic Auth.
+
+## Workflow views
+
+### Search and matching
+
+```mermaid
+flowchart LR
+    Schedule["Schedule<br/>08:00 · 11:00 · 14:00 · 18:00"]
+    Customers["Load active customers<br/>GET /kunden"]
+    Pool["Build one shared job pool<br/>Federal Employment Agency + Adzuna"]
+    CV["Download each CV<br/>Groq structures extracted text"]
+    Rank["Rank and filter locally<br/>preferences · TF-IDF · cosine similarity"]
+    Select["Select up to 6 job matches"]
+    Enrich["Groq evaluates selected jobs<br/>score · requirements · cover-letter draft"]
+
+    Schedule --> Customers --> Pool --> CV --> Rank --> Select --> Enrich
+```
+
+The schedule uses the n8n instance timezone. The `/kunden` endpoint returns at most 200 active customers per request; the workflow does not paginate beyond that limit. CV text is parsed by Groq first. Matching and strict-requirement filtering then run locally in n8n, and only the selected matches receive job-specific Groq processing.
+
+### Results and error handling
+
+```mermaid
+flowchart LR
+    Match["Match details and draft"] --> Submit["POST /bewerbung"]
+    Submit --> Duplicate["Check customer + job URL"]
+    Duplicate --> Store["Save jap_bewerbung match"]
+    Store --> PDF["Generate CV and cover-letter PDFs"]
+    PDF --> Dashboard["Show results in customer dashboard"]
+
+    Problem["CV data unusable or Groq key rejected"] --> Report["POST /schluessel-problem"]
+    Report --> Notify["Notify customer by email"]
+```
+
+The plugin checks for duplicate matches before saving. The key-problem route reports an unusable CV/Groq key and rate-limits customer notifications.
 
 ## Components
 
