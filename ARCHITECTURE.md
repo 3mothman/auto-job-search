@@ -73,11 +73,15 @@ sequenceDiagram
             Media-->>N8N: CV file
             N8N->>Groq: Parse up to 7,000 characters of extracted CV text
             Groq-->>N8N: Structured CV fields
-            N8N->>N8N: Rank locally and select up to six matches
-            N8N->>Groq: Score matches, summarize requirements, draft cover letter
-            Groq-->>N8N: Match details and application draft
-            N8N->>REST: POST /bewerbung
-            REST->>DB: Check duplicate and store match
+            alt CV data is usable and the customer's key is valid
+                N8N->>N8N: Rank locally and select up to six matches
+                N8N->>Groq: Score matches, summarize requirements, draft cover letter
+                Groq-->>N8N: Match details and application draft
+                N8N->>REST: POST /bewerbung
+                REST->>DB: Check duplicate and store match
+            else CV data is unusable or the key is rejected
+                N8N->>REST: POST /schluessel-problem
+            end
         end
     end
 
@@ -104,7 +108,7 @@ flowchart TD
     E["Key problem<br/>POST /schluessel-problem"]
 
     S --> C --> P --> L --> X --> R --> F --> G --> W --> D --> V
-    L -. "unreadable CV or rejected key" .-> E
+    X -. "CV data unusable or Groq key rejected" .-> E
 ```
 
 The shared pool is searched once for the customer batch rather than once per customer. Groq first structures the extracted CV text. After that step, matching and filtering run locally in n8n; only up to six selected job matches per customer are sent for job-specific Groq evaluation. The workflow prepares documents but does not submit job applications.
