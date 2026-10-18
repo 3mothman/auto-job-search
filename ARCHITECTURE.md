@@ -39,7 +39,7 @@ flowchart LR
     style Webhook fill:#fbe9d5,stroke:#b45309,stroke-dasharray: 4 3
 ```
 
-n8n fetches the work itself (pull) instead of having the portal push it (push). Registration can also trigger a separate webhook (plugin setting `jap_n8n_webhook_url`), but that webhook is not part of the workflow documented here. The search run retrieves all active customers itself, whether or not the webhook is configured.
+n8n fetches the work itself (pull) instead of having the portal push it (push). Registration can also trigger a separate webhook (plugin setting `jap_n8n_webhook_url`), but that webhook is not part of the workflow documented here. The `/kunden` endpoint returns at most 200 active customers per request; the workflow does not paginate beyond that limit. The schedule is 08:00, 11:00, 14:00, and 18:00 in the n8n instance timezone, which is not set in this workflow export.
 
 | Component | Responsibility | Files / endpoints |
 |---|---|---|
@@ -49,7 +49,7 @@ n8n fetches the work itself (pull) instead of having the portal push it (push). 
 | Encryption | Customer API keys are never stored in plain text; the key is derived from WordPress salts | `includes/verschluesselung.php` |
 | PDF generation | Server-side CVs and cover letters, without a Google account or external service | `includes/pdf.php`, `pdf-document.php`, `lib/fpdf` |
 | n8n automation | Scheduled search, evaluation, and document generation | `n8n/apify.json` |
-| External services | Job sources and LLM evaluation, each using the customer's personal key | Federal Employment Agency job listings API · Adzuna · Groq |
+| External services | Job sources and LLM evaluation | Federal Employment Agency job listings API · shared Adzuna credentials · each customer's personal Groq key |
 
 ## Automation pipeline
 
@@ -62,7 +62,7 @@ flowchart LR
     T5["5 · LLM enrichment<br/>Score · requirements · cover letter (Groq)"]
     T6["6 · Send results back<br/>POST /bewerbung"]
     T7["7 · PDF + email<br/>server-side (WP portal)"]
-    ERR["Error path: invalid Groq or Adzuna key<br/>POST /schluessel-problem → email to customer (max. once a day)"]
+    ERR["Error path: rejected customer Groq key<br/>POST /schluessel-problem → email to customer (max. once a day)"]
 
     T1 --> T2 --> T3 --> T4 --> T5 --> T6 --> T7
     T5 -.-> ERR
@@ -107,10 +107,11 @@ Before saving, a match is checked for duplicates using `jap_user_id` + `jap_job_
 
 ## Security
 
-- Customer API keys (Groq, Adzuna) are stored encrypted. The encryption key is derived from WordPress salts (`AUTH_KEY` and others), so it is not stored in the database itself.
-- The `jap/v1/*` REST endpoints are not public. n8n authenticates with a WordPress application password (Basic Auth) for an account with write access.
+- Each customer's Groq key is stored encrypted in user meta, using a key derived from WordPress salts (`AUTH_KEY` and others). The shared Adzuna App ID and key are stored as WordPress site options, not as customer keys; restrict access to the WordPress admin and integration credentials.
+- The `jap/v1/*` integration endpoints require the `manage_options` capability and n8n authenticates with an administrator application password (Basic Auth). Keep that credential private.
 - Each customer uses their own Groq and Adzuna keys. n8n does not hold shared LLM credit; if a key is misused, only that customer is affected.
-- An invalid key triggers an explicit error message to the customer (at most once per day), instead of silently returning no more matches.
+- A rejected customer Groq key triggers an explicit error message to the customer (at most once per day). Failures of the shared Adzuna credentials are not currently reported through this customer error route and must be handled by the operator.
+- n8n downloads the customer's CV and sends up to 7,000 characters of extracted CV text to Groq for parsing. It then sends relevant candidate and job details to Groq for match scoring and German application-document drafts. The privacy page describes the transfer to Groq; keep that disclosure aligned with the service configuration.
 - The privacy policy and imprint texts are templates according to the code comment, not legal advice; review them before launch.
 
 ## Operations & repository
@@ -123,4 +124,4 @@ Before saving, a match is checked for duplicates using `jap_user_id` + `jap_job_
 | `assets/` | CSS and images for the portal |
 | `n8n/apify.json` | Exported n8n workflow — import using “Import from File” |
 
-To run the system, you need a WordPress installation with the plugin, an n8n instance with the workflow imported, an admin application password for REST authentication, a shared Adzuna account, and a separate Groq key for each customer. Recreate the `WP Portal Auth` credential in n8n after importing; the export contains a reference only, not any secrets.
+To run the system, you need a WordPress installation with the plugin, an n8n instance with the workflow imported, an administrator application password for REST authentication, a shared Adzuna account, and a separate Groq key for each customer. Recreate the `WP Portal Auth` credential in n8n after importing; the export contains a reference only, not any secrets. The workflow export hard-codes the current Hostinger portal URL in its three WordPress HTTP nodes; update all three URLs when deploying to a different site.
